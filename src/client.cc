@@ -106,7 +106,7 @@ class Client : public ObjectWrap {
       while (!done) {
         switch (state) {
           case STATE_CONNECT:
-DEBUG("STATE_CONNECT");
+//DEBUG("STATE_CONNECT");
             status = mysql_real_connect_start(&mysql_ret, &mysql,
                                               config.ip,
                                               config.user,
@@ -125,7 +125,7 @@ DEBUG("STATE_CONNECT");
             }
             break;
           case STATE_CONNECTING:
-DEBUG("STATE_CONNECTING");
+//DEBUG("STATE_CONNECTING");
             status = mysql_real_connect_cont(&mysql_ret, &mysql, event);
             if (status)
               done = true;
@@ -137,11 +137,11 @@ DEBUG("STATE_CONNECTING");
             }
             break;
           case STATE_CONNECTED:
-DEBUG("STATE_CONNECTED");
+//DEBUG("STATE_CONNECTED");
             done = true;
             break;
           case STATE_QUERY:
-DEBUG("STATE_QUERY");
+//DEBUG("STATE_QUERY");
             status = mysql_real_query_start(&mysql_qerr, &mysql, cur_query,
                                             strlen(cur_query));
             if (status) {
@@ -151,7 +151,7 @@ DEBUG("STATE_QUERY");
               state = STATE_QUERIED;
             break;
           case STATE_QUERYING:
-DEBUG("STATE_QUERYING");
+//DEBUG("STATE_QUERYING");
             status = mysql_real_query_cont(&mysql_qerr, &mysql,
                                            mysql_status(event));
             if (status)
@@ -164,14 +164,14 @@ DEBUG("STATE_QUERYING");
             }
             break;
           case STATE_QUERIED:
-DEBUG("STATE_QUERIED");
+//DEBUG("STATE_QUERIED");
             mysql_res = mysql_use_result(&mysql);
             if (!mysql_res)
               return emitError("query");
             state = STATE_ROWSTREAM;
             break;
           case STATE_ROWSTREAM:
-DEBUG("STATE_ROWSTREAM");
+//DEBUG("STATE_ROWSTREAM");
             status = mysql_fetch_row_start(&mysql_row, mysql_res);
             if (status) {
               done = true;
@@ -180,7 +180,7 @@ DEBUG("STATE_ROWSTREAM");
               state = STATE_ROWSTREAMED;
             break;
           case STATE_ROWSTREAMING:
-DEBUG("STATE_ROWSTREAMING");
+//DEBUG("STATE_ROWSTREAMING");
             status = mysql_fetch_row_cont(&mysql_row, mysql_res,
                                           mysql_status(event));
             if (status)
@@ -189,7 +189,7 @@ DEBUG("STATE_ROWSTREAMING");
               state = STATE_ROWSTREAMED;
             break;
           case STATE_ROWSTREAMED:
-DEBUG("STATE_ROWSTREAMED");
+//DEBUG("STATE_ROWSTREAMED");
             if (mysql_row) {
               state = STATE_ROWSTREAM;
               emitRow();
@@ -206,35 +206,11 @@ DEBUG("STATE_ROWSTREAMED");
             }
             break;
           case STATE_CLOSE:
-DEBUG("STATE_CLOSE");
+//DEBUG("STATE_CLOSE");
             mysql_close(&mysql);
             state = STATE_CLOSED;
             uv_close((uv_handle_t*) &poll_handle, cbClose);
             return;
-            /*
-            status = mysql_close_start(&mysql);
-            if (status) {
-              done = true;
-              state = STATE_CLOSING;
-            } else {
-              state = STATE_CLOSED;
-DEBUG("STATE_CLOSED");
-              uv_close((uv_handle_t*) &poll_handle, cbClose);
-              return;
-            }*/
-            break;
-          case STATE_CLOSING:
-DEBUG("STATE_CLOSING");
-            status = mysql_close_cont(&mysql, mysql_status(event));
-            if (status)
-              done = true;
-            else {
-              state = STATE_CLOSED;
-DEBUG("STATE_CLOSED");
-              uv_close((uv_handle_t*) &poll_handle, cbClose);
-              return;
-            }
-            break;
           case STATE_CLOSED:
             return;
         }
