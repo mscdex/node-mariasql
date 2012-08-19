@@ -75,16 +75,26 @@ class Client : public ObjectWrap {
 
     void close() {
       if (state != STATE_CLOSED) {
-        if (config.user)
+        if (config.user) {
           free(config.user);
-        if (config.password)
+          config.user = NULL;
+        }
+        if (config.password) {
           free(config.password);
-        if (config.ip)
+          config.password = NULL;
+        }
+        if (config.ip) {
           free(config.ip);
-        if (config.db)
+          config.ip = NULL;
+        }
+        if (config.db) {
           free(config.db);
-        if (cur_query)
+          config.db = NULL;
+        }
+        if (cur_query) {
           free(cur_query);
+          cur_query = NULL;
+        }
         
         state = STATE_CLOSE;
         doWork();
@@ -163,7 +173,10 @@ class Client : public ObjectWrap {
             if (status)
               done = true;
             else {
-              free(cur_query);
+              if (cur_query) {
+                free(cur_query);
+                cur_query = NULL;
+              }
               if (mysql_qerr)
                 return emitError("query");
               state = STATE_QUERIED;
