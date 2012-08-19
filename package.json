@@ -1,0 +1,10 @@
+{ "name": "mariasql",
+  "version": "0.0.0",
+  "author": "Brian White <mscdex@mscdex.net>",
+  "description": "A node.js binding to MariaDB's non-blocking (MySQL) client library",
+  "main": "./index",
+  "engines": { "node": ">=0.8.0" },
+  "keywords": [ "mysql", "sql", "client", "mariadb", "async", "nonblocking" ],
+  "licenses": [ { "type": "MIT", "url": "http://github.com/mscdex/node-mariasql/raw/master/LICENSE" } ],
+  "repository" : { "type": "git", "url": "http://github.com/mscdex/node-mariasql.git" }
+}
