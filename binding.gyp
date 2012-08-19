@@ -31,7 +31,7 @@
           #}
         }, {
           'libraries': [
-            'libmysqlclient.a',
+            '-l:libmysqlclient.a',
           ],
         }],
       ]
