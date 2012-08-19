@@ -9,7 +9,11 @@ using namespace v8;
 static Persistent<FunctionTemplate> Client_constructor;
 static Persistent<String> emit_symbol;
 
-const int STATE_CONNECT = 0,
+const int
+          STATE_CLOSE = -3,
+          STATE_CLOSING = -2,
+          STATE_CLOSED = -1,
+          STATE_CONNECT = 0,
           STATE_CONNECTING = 1,
           STATE_CONNECTED = 2,
           STATE_QUERY = 3,
@@ -17,10 +21,7 @@ const int STATE_CONNECT = 0,
           STATE_QUERIED = 5,
           STATE_ROWSTREAM = 6,
           STATE_ROWSTREAMING = 7,
-          STATE_ROWSTREAMED = 8,
-          STATE_CLOSE = 9,
-          STATE_CLOSING = 10,
-          STATE_CLOSED = 11;
+          STATE_ROWSTREAMED = 8;
 
 struct sql_config {
   char* user;
@@ -90,6 +91,13 @@ class Client : public ObjectWrap {
         state = STATE_CLOSE;
         doWork();
       }
+    }
+
+    char* escape(const char* str) {
+      unsigned int str_len = strlen(str);
+      char* dest = (char*) malloc(str_len * 2 + 1);
+      mysql_real_escape_string(&mysql, dest, str, str_len);
+      return dest;
     }
 
     void query(const char* qry) {
@@ -320,6 +328,26 @@ class Client : public ObjectWrap {
       return args.This();
     }
 
+    static Handle<Value> Escape(const Arguments& args) {
+      HandleScope scope;
+      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+
+      if (obj->state < STATE_CONNECTED) {
+        return ThrowException(Exception::Error(
+          String::New("Not connected"))
+        );
+      } else if (args.Length() == 0 || !args[0]->IsString()) {
+        return ThrowException(Exception::Error(
+          String::New("You must supply a string"))
+        );
+      }
+      String::Utf8Value arg_s(args[0]);
+      char* newstr = obj->escape(*arg_s);
+      Local<String> escaped_s = String::New(newstr);
+      free(newstr);
+      return scope.Close(escaped_s);
+    }
+
     static Handle<Value> Connect(const Arguments& args) {
       HandleScope scope;
       Client* obj = ObjectWrap::Unwrap<Client>(args.This());
@@ -419,6 +447,7 @@ class Client : public ObjectWrap {
 
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "connect", Connect);
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "query", Query);
+      NODE_SET_PROTOTYPE_METHOD(Client_constructor, "escape", Escape);
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "end", Close);
 
       emit_symbol = NODE_PSYMBOL("emit");
