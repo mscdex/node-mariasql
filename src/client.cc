@@ -9,9 +9,7 @@ using namespace v8;
 static Persistent<FunctionTemplate> Client_constructor;
 static Persistent<String> emit_symbol;
 
-const int
-          STATE_CLOSE = -3,
-          STATE_CLOSING = -2,
+const int STATE_CLOSE = -2,
           STATE_CLOSED = -1,
           STATE_CONNECT = 0,
           STATE_CONNECTING = 1,
