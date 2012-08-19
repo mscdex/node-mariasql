@@ -137,7 +137,7 @@ class Client : public ObjectWrap {
               done = true;
             else {
               if (!mysql_ret)
-                return emitError("conn");
+                return emitError("conn", true);
               state = STATE_CONNECTED;
               emit("connect");
             }
@@ -228,7 +228,7 @@ class Client : public ObjectWrap {
       uv_poll_start(&poll_handle, new_events, cbPoll);
     }
 
-    void emitError(const char* when) {
+    void emitError(const char* when, bool doClose = false) {
       HandleScope scope;
       hadError = true;
       Local<Function> Emit = Local<Function>::Cast(handle_->Get(emit_symbol));
@@ -245,7 +245,8 @@ class Client : public ObjectWrap {
       Emit->Call(handle_, 2, emit_argv);
       if (try_catch.HasCaught())
         FatalException(try_catch);
-      close();
+      if (doClose)
+        close();
     }
 
     void emit(const char* eventName) {
