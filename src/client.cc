@@ -380,12 +380,9 @@ class Client : public ObjectWrap {
       Local<Value> compress_v = cfg->Get(String::New("compress"));
       Local<Value> ssl_v = cfg->Get(String::New("secure"));
 
-      if (!user_v->IsString() || user_v->ToString()->Length() == 0) {
-        obj->close();
-        return ThrowException(Exception::Error(
-          String::New("`user` must be a non-empty string"))
-        );
-      } else {
+      if (!user_v->IsString() || user_v->ToString()->Length() == 0)
+        obj->config.user = NULL;
+      else {
         String::Utf8Value user_s(user_v);
         obj->config.user = strdup(*user_s);
       }
@@ -429,7 +426,7 @@ class Client : public ObjectWrap {
           String::New("Query expected"))
         );
       }
-      String::Utf8Value query(args[0]->ToString());
+      String::Utf8Value query(args[0]);
       obj->query(*query);
       return Undefined();
     }
