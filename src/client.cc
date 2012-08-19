@@ -76,7 +76,6 @@ class Client : public ObjectWrap {
 
     void close() {
       if (state != STATE_CLOSED) {
-        state = STATE_CLOSE;
         if (config.user)
           free(config.user);
         if (config.password)
@@ -87,6 +86,8 @@ class Client : public ObjectWrap {
           free(config.db);
         if (cur_query)
           free(cur_query);
+        
+        state = STATE_CLOSE;
         doWork();
       }
     }
@@ -206,6 +207,11 @@ DEBUG("STATE_ROWSTREAMED");
             break;
           case STATE_CLOSE:
 DEBUG("STATE_CLOSE");
+            mysql_close(&mysql);
+            state = STATE_CLOSED;
+            uv_close((uv_handle_t*) &poll_handle, cbClose);
+            return;
+            /*
             status = mysql_close_start(&mysql);
             if (status) {
               done = true;
@@ -215,7 +221,7 @@ DEBUG("STATE_CLOSE");
 DEBUG("STATE_CLOSED");
               uv_close((uv_handle_t*) &poll_handle, cbClose);
               return;
-            }
+            }*/
             break;
           case STATE_CLOSING:
 DEBUG("STATE_CLOSING");
