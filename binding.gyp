@@ -24,7 +24,7 @@
                 ],
               }, {
                 'libraries': [
-                  'deps/libmysql-maria/win-x86_64/clientlib.lib',
+                  '<(PRODUCT_DIR)/../../deps/libmysql-maria/win-x86_64/clientlib.lib',
                 ],
               }]
             ]
