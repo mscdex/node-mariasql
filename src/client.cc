@@ -1,6 +1,5 @@
 #include <node.h>
-#include <node_buffer.h>
-
+#include <stdlib.h>
 #include <mysql/mysql.h>
 
 using namespace node;
