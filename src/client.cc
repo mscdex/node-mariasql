@@ -549,6 +549,17 @@ class Client : public ObjectWrap {
       return Undefined();
     }
 
+    static Handle<Value> IsMariaDB(const Arguments& args) {
+      HandleScope scope;
+      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      if (obj->state < STATE_CONNECTED) {
+        return ThrowException(Exception::Error(
+          String::New("Not connected"))
+        );
+      }
+      return scope.Close(Boolean::New(mariadb_connection(&obj->mysql)));
+    }
+
     static void Initialize(Handle<Object> target) {
       HandleScope scope;
 
@@ -564,6 +575,7 @@ class Client : public ObjectWrap {
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "abortQuery", AbortQuery);
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "escape", Escape);
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "end", Close);
+      NODE_SET_PROTOTYPE_METHOD(Client_constructor, "isMariaDB", IsMariaDB);
 
       emit_symbol = NODE_PSYMBOL("emit");
       target->Set(name, Client_constructor->GetFunction());
