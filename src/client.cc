@@ -8,7 +8,8 @@ using namespace v8;
 static Persistent<FunctionTemplate> Client_constructor;
 static Persistent<String> emit_symbol;
 
-const int STATE_CLOSE = -2,
+const int STATE_NULL = -100,
+          STATE_CLOSE = -2,
           STATE_CLOSED = -1,
           STATE_CONNECT = 0,
           STATE_CONNECTING = 1,
@@ -18,7 +19,15 @@ const int STATE_CLOSE = -2,
           STATE_QUERIED = 5,
           STATE_ROWSTREAM = 6,
           STATE_ROWSTREAMING = 7,
-          STATE_ROWSTREAMED = 8;
+          STATE_ROWSTREAMED = 8,
+          STATE_RESULTFREE = 9,
+          STATE_RESULTFREEING = 10,
+          STATE_RESULTFREED = 11,
+          STATE_KILL = 12,
+          STATE_KILLING = 13,
+          STATE_KILLED = 14,
+          STATE_RESULTERR = 15,
+          STATE_QUERYABORTED = 16;
 
 struct sql_config {
   char* user;
@@ -31,6 +40,7 @@ struct sql_config {
 
 #include <stdio.h>
 #define DEBUG(s) fprintf(stderr, "BINDING: " s "\n")
+#define FREE(v) if (v) { free(v); v = NULL; }
 
 class Client : public ObjectWrap {
   public:
@@ -41,8 +51,8 @@ class Client : public ObjectWrap {
     int mysql_qerr;
     char* cur_query;
     sql_config config;
-    bool hadError;
-    int state;
+    bool hadError, aborting;
+    int state, deferredState;
 
     Client() {
       state = STATE_CLOSED;
@@ -58,7 +68,8 @@ class Client : public ObjectWrap {
       config.ip = NULL;
       config.db = NULL;
       cur_query = NULL;
-      hadError = false;
+      hadError = aborting = false;
+      deferredState = STATE_NULL;
       poll_handle.type = UV_UNKNOWN_HANDLE;
 
       mysql_init(&mysql);
@@ -74,27 +85,11 @@ class Client : public ObjectWrap {
 
     void close() {
       if (state != STATE_CLOSED) {
-        if (config.user) {
-          free(config.user);
-          config.user = NULL;
-        }
-        if (config.password) {
-          free(config.password);
-          config.password = NULL;
-        }
-        if (config.ip) {
-          free(config.ip);
-          config.ip = NULL;
-        }
-        if (config.db) {
-          free(config.db);
-          config.db = NULL;
-        }
-        if (cur_query) {
-          free(cur_query);
-          cur_query = NULL;
-        }
-        
+        FREE(config.user);
+        FREE(config.password);
+        FREE(config.ip);
+        FREE(config.db);
+        FREE(cur_query);
         state = STATE_CLOSE;
         doWork();
       }
@@ -105,6 +100,15 @@ class Client : public ObjectWrap {
       char* dest = (char*) malloc(str_len * 2 + 1);
       mysql_real_escape_string(&mysql, dest, str, str_len);
       return dest;
+    }
+
+    void abortQuery() {
+      if (state >= STATE_QUERY && state <= STATE_ROWSTREAMED) {
+        FREE(cur_query);
+        aborting = true;
+        state = STATE_KILL;
+        doWork();
+      }
     }
 
     void query(const char* qry) {
@@ -153,36 +157,52 @@ class Client : public ObjectWrap {
             break;
           case STATE_CONNECTED:
 //DEBUG("STATE_CONNECTED");
-            done = true;
-            break;
+            return;
           case STATE_QUERY:
 //DEBUG("STATE_QUERY");
+            if (aborting) {
+              FREE(cur_query);
+              aborting = false;
+              state = STATE_CONNECTED;
+              return emit("queryAbort");
+            }
             status = mysql_real_query_start(&mysql_qerr, &mysql, cur_query,
                                             strlen(cur_query));
             if (status) {
               state = STATE_QUERYING;
               done = true;
-            } else
+            } else {
+              FREE(cur_query);
               state = STATE_QUERIED;
+            }
             break;
           case STATE_QUERYING:
 //DEBUG("STATE_QUERYING");
-            status = mysql_real_query_cont(&mysql_qerr, &mysql,
-                                           mysql_status(event));
-            if (status)
-              done = true;
-            else {
-              if (cur_query) {
-                free(cur_query);
-                cur_query = NULL;
+            if (aborting) {
+              FREE(cur_query);
+              aborting = false;
+              state = STATE_KILL;
+              deferredState = STATE_QUERYABORTED;
+            } else {
+              status = mysql_real_query_cont(&mysql_qerr, &mysql,
+                                             mysql_status(event));
+              if (status)
+                done = true;
+              else {
+                FREE(cur_query);
+                if (mysql_qerr)
+                  return emitError("query");
+                state = STATE_QUERIED;
               }
-              if (mysql_qerr)
-                return emitError("query");
-              state = STATE_QUERIED;
             }
             break;
           case STATE_QUERIED:
 //DEBUG("STATE_QUERIED");
+            if (aborting) {
+              aborting = false;
+              state = STATE_CONNECTED;
+              return emit("queryAbort");
+            }
             mysql_res = mysql_use_result(&mysql);
             if (!mysql_res) {
               if (mysql_errno(&mysql))
@@ -194,37 +214,112 @@ class Client : public ObjectWrap {
             break;
           case STATE_ROWSTREAM:
 //DEBUG("STATE_ROWSTREAM");
-            status = mysql_fetch_row_start(&mysql_row, mysql_res);
-            if (status) {
+            if (aborting) {
+              aborting = false;
+              state = STATE_RESULTFREE;
+              deferredState = STATE_QUERYABORTED;
               done = true;
-              state = STATE_ROWSTREAMING;
-            } else
-              state = STATE_ROWSTREAMED;
+            } else {
+              status = mysql_fetch_row_start(&mysql_row, mysql_res);
+              if (status) {
+                done = true;
+                state = STATE_ROWSTREAMING;
+              } else
+                state = STATE_ROWSTREAMED;
+            }
             break;
           case STATE_ROWSTREAMING:
 //DEBUG("STATE_ROWSTREAMING");
-            status = mysql_fetch_row_cont(&mysql_row, mysql_res,
-                                          mysql_status(event));
-            if (status)
+            if (aborting) {
+              aborting = false;
+              state = STATE_RESULTFREE;
+              deferredState = STATE_QUERYABORTED;
               done = true;
-            else
-              state = STATE_ROWSTREAMED;
+            } else {
+              status = mysql_fetch_row_cont(&mysql_row, mysql_res,
+                                            mysql_status(event));
+              if (status)
+                done = true;
+              else
+                state = STATE_ROWSTREAMED;
+            }
             break;
           case STATE_ROWSTREAMED:
 //DEBUG("STATE_ROWSTREAMED");
-            if (mysql_row) {
+            if (aborting) {
+              aborting = false;
+              state = STATE_RESULTFREE;
+              deferredState = STATE_QUERYABORTED;
+              done = true;
+            } else if (mysql_row) {
               state = STATE_ROWSTREAM;
               emitRow();
             } else {
               if (mysql_errno(&mysql)) {
-                mysql_free_result(mysql_res);
-                return emitError("result");
+                deferredState = STATE_RESULTERR;
+                state = STATE_RESULTFREE;
               } else {
                 // no more rows
                 mysql_free_result(mysql_res);
                 state = STATE_CONNECTED;
                 emit("done");
               }
+            }
+            break;
+          case STATE_KILL:
+            char killquery[128];
+            sprintf(killquery, "KILL QUERY %u", mysql_thread_id(&mysql));
+            status = mysql_real_query_start(&mysql_qerr, &mysql, killquery,
+                                            strlen(killquery));
+            if (status) {
+              state = STATE_KILLING;
+              done = true;
+            } else
+              state = STATE_KILLED;
+            break;
+          case STATE_KILLING:
+            status = mysql_real_query_cont(&mysql_qerr, &mysql,
+                                           mysql_status(event));
+            if (status)
+              done = true;
+            else
+              state = STATE_KILLED;
+          case STATE_KILLED:
+            if (deferredState == STATE_NULL)
+              return emit("queryAbort");
+            else {
+              state = deferredState;
+              deferredState = STATE_NULL;
+            }
+            break;
+          case STATE_RESULTERR:
+            state = STATE_CONNECTED;
+            return emitError("result");
+          case STATE_QUERYABORTED:
+            state = STATE_CONNECTED;
+            return emit("queryAbort");
+          case STATE_RESULTFREE:
+            status = mysql_free_result_start(mysql_res);
+            if (status) {
+              state = STATE_RESULTFREEING;
+              done = true;
+            } else
+              state = STATE_RESULTFREED;
+            break;
+          case STATE_RESULTFREEING:
+            status = mysql_free_result_cont(mysql_res, mysql_status(event));
+            if (status)
+              done = true;
+            else
+              state = STATE_RESULTFREED;
+            break;
+          case STATE_RESULTFREED:
+            state = STATE_CONNECTED;
+            if (deferredState == STATE_NULL)
+              return emit("queryAbort");
+            else {
+              state = deferredState;
+              deferredState = STATE_NULL;
             }
             break;
           case STATE_CLOSE:
@@ -417,6 +512,13 @@ class Client : public ObjectWrap {
       return Undefined();
     }
 
+    static Handle<Value> AbortQuery(const Arguments& args) {
+      HandleScope scope;
+      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      obj->abortQuery();
+      return Undefined();
+    }
+
     static Handle<Value> Query(const Arguments& args) {
       HandleScope scope;
       Client* obj = ObjectWrap::Unwrap<Client>(args.This());
@@ -459,6 +561,7 @@ class Client : public ObjectWrap {
 
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "connect", Connect);
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "query", Query);
+      NODE_SET_PROTOTYPE_METHOD(Client_constructor, "abortQuery", AbortQuery);
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "escape", Escape);
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "end", Close);
 
