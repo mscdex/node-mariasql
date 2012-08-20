@@ -588,18 +588,7 @@ class Client : public ObjectWrap {
 
 static Handle<Value> Version(const Arguments& args) {
   HandleScope scope;
-  unsigned long client_ver = mysql_get_client_version();
-  char major = (client_ver >> 16) & 0xFF,
-       release = (client_ver >> 8) & 0xFF,
-       rel_ver = client_ver & 0xFF;
-  int slen = (major < 10 ? 1 : 2)
-             + (release < 10 ? 1 : 2)
-             + (rel_ver < 10 ? 1 : 2);
-  char* ver = (char*) malloc(slen + 3);
-  sprintf(ver, "%u.%u.%u", major, release, rel_ver);
-  Local<String> ver_str = String::New(ver);
-  free(ver);
-  return scope.Close(ver_str);
+  return scope.Close(String::New(mysql_get_client_info()));
 }
 
 extern "C" {
