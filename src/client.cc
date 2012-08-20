@@ -190,8 +190,10 @@ class Client : public ObjectWrap {
                 done = true;
               else {
                 FREE(cur_query);
-                if (mysql_qerr)
+                if (mysql_qerr) {
+                  state = STATE_CONNECTED;
                   return emitError("query");
+                }
                 state = STATE_QUERIED;
               }
             }
@@ -205,8 +207,10 @@ class Client : public ObjectWrap {
             }
             mysql_res = mysql_use_result(&mysql);
             if (!mysql_res) {
-              if (mysql_errno(&mysql))
+              if (mysql_errno(&mysql)) {
+                state = STATE_CONNECTED;
                 return emitError("query");
+              }
               state = STATE_CONNECTED;
               emit("done");
             } else
