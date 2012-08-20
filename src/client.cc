@@ -184,9 +184,13 @@ class Client : public ObjectWrap {
           case STATE_QUERIED:
 //DEBUG("STATE_QUERIED");
             mysql_res = mysql_use_result(&mysql);
-            if (!mysql_res)
-              return emitError("query");
-            state = STATE_ROWSTREAM;
+            if (!mysql_res) {
+              if (mysql_errno(&mysql))
+                return emitError("query");
+              state = STATE_CONNECTED;
+              emit("done");
+            } else
+              state = STATE_ROWSTREAM;
             break;
           case STATE_ROWSTREAM:
 //DEBUG("STATE_ROWSTREAM");
