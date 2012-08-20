@@ -129,8 +129,10 @@ TODO
 
 * Misc. query info (e.g. affected_rows, insert_id, etc)
 
-* Auto-reconnect algorithm(s)
+* Auto-reconnect algorithm(s) ?
 
-* Array-based query results option instead of being forced into a fieldName=>value object
+* Option to use array of field values instead of a fieldName=>value object
+
+* Efficiently detect socket disconnection
 
 * Possibly some other stuff I'm not aware of at the moment
