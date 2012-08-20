@@ -19,7 +19,7 @@ Requirements
 
 * [node.js](http://nodejs.org/) -- v0.8.0 or newer
 
-* \*nix users need to install the libmariadbclient-dev package (must be 5.5.x+).
+* \*nix users need to install the libmariadbclient-dev package (must be 5.5.21+).
   Linux users can get this from [the MariaDB repositories](http://downloads.mariadb.org/MariaDB/repositories/).
 
 
