@@ -2,7 +2,7 @@
 Description
 ===========
 
-A [node.js](http://nodejs.org/) binding to MariaDB's non-blocking (MySQL) client
+A [node.js](http://nodejs.org/) binding to MariaDB's non-blocking (MySQL-compatible) client
 library.
 
 This binding is different from other vanilla libmysqlclient bindings in that it
