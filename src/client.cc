@@ -106,13 +106,12 @@ class Client : public ObjectWrap {
       if (state >= STATE_QUERY && state <= STATE_ROWSTREAMED) {
         FREE(cur_query);
         aborting = true;
-        state = STATE_KILL;
-        doWork();
       }
     }
 
     void query(const char* qry) {
       if (state == STATE_CONNECTED) {
+        FREE(cur_query);
         cur_query = strdup(qry);
         state = STATE_QUERY;
         doWork();
@@ -125,7 +124,6 @@ class Client : public ObjectWrap {
       while (!done) {
         switch (state) {
           case STATE_CONNECT:
-//DEBUG("STATE_CONNECT");
             status = mysql_real_connect_start(&mysql_ret, &mysql,
                                               config.ip,
                                               config.user,
@@ -136,15 +134,14 @@ class Client : public ObjectWrap {
                                 mysql_get_socket(&mysql));
             poll_handle.data = this;
             if (status) {
-              state = STATE_CONNECTING;
               done = true;
+              state = STATE_CONNECTING;
             } else {
               state = STATE_CONNECTED;
-              emit("connect");
+              return emit("connect");
             }
             break;
           case STATE_CONNECTING:
-//DEBUG("STATE_CONNECTING");
             status = mysql_real_connect_cont(&mysql_ret, &mysql, event);
             if (status)
               done = true;
@@ -152,14 +149,12 @@ class Client : public ObjectWrap {
               if (!mysql_ret)
                 return emitError("conn", true);
               state = STATE_CONNECTED;
-              emit("connect");
+              return emit("connect");
             }
             break;
           case STATE_CONNECTED:
-//DEBUG("STATE_CONNECTED");
             return;
           case STATE_QUERY:
-//DEBUG("STATE_QUERY");
             if (aborting) {
               FREE(cur_query);
               aborting = false;
@@ -177,7 +172,6 @@ class Client : public ObjectWrap {
             }
             break;
           case STATE_QUERYING:
-//DEBUG("STATE_QUERYING");
             if (aborting) {
               FREE(cur_query);
               aborting = false;
@@ -199,7 +193,6 @@ class Client : public ObjectWrap {
             }
             break;
           case STATE_QUERIED:
-//DEBUG("STATE_QUERIED");
             if (aborting) {
               aborting = false;
               state = STATE_CONNECTED;
@@ -212,44 +205,39 @@ class Client : public ObjectWrap {
                 return emitError("query");
               }
               state = STATE_CONNECTED;
-              emit("done");
+              return emit("done");
             } else
               state = STATE_ROWSTREAM;
             break;
           case STATE_ROWSTREAM:
-//DEBUG("STATE_ROWSTREAM");
             if (aborting) {
               aborting = false;
               state = STATE_RESULTFREE;
               deferredState = STATE_QUERYABORTED;
-              done = true;
-            } else {
-              status = mysql_fetch_row_start(&mysql_row, mysql_res);
-              if (status) {
-                done = true;
-                state = STATE_ROWSTREAMING;
-              } else
-                state = STATE_ROWSTREAMED;
+              return;
             }
+            status = mysql_fetch_row_start(&mysql_row, mysql_res);
+            if (status) {
+              done = true;
+              state = STATE_ROWSTREAMING;
+            } else
+              state = STATE_ROWSTREAMED;
             break;
           case STATE_ROWSTREAMING:
-//DEBUG("STATE_ROWSTREAMING");
             if (aborting) {
               aborting = false;
               state = STATE_RESULTFREE;
               deferredState = STATE_QUERYABORTED;
-              done = true;
-            } else {
-              status = mysql_fetch_row_cont(&mysql_row, mysql_res,
-                                            mysql_status(event));
-              if (status)
-                done = true;
-              else
-                state = STATE_ROWSTREAMED;
+              return;
             }
+            status = mysql_fetch_row_cont(&mysql_row, mysql_res,
+                                          mysql_status(event));
+            if (status)
+              done = true;
+            else
+              state = STATE_ROWSTREAMED;
             break;
           case STATE_ROWSTREAMED:
-//DEBUG("STATE_ROWSTREAMED");
             if (aborting) {
               aborting = false;
               state = STATE_RESULTFREE;
@@ -266,7 +254,7 @@ class Client : public ObjectWrap {
                 // no more rows
                 mysql_free_result(mysql_res);
                 state = STATE_CONNECTED;
-                emit("done");
+                return emit("done");
               }
             }
             break;
@@ -327,7 +315,6 @@ class Client : public ObjectWrap {
             }
             break;
           case STATE_CLOSE:
-//DEBUG("STATE_CLOSE");
             mysql_close(&mysql);
             state = STATE_CLOSED;
             uv_close((uv_handle_t*) &poll_handle, cbClose);
