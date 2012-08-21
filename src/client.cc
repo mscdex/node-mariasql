@@ -204,8 +204,10 @@ class Client : public ObjectWrap {
                 state = STATE_CONNECTED;
                 return emitError("query");
               }
+              my_ulonglong insert_id = mysql_insert_id(&mysql),
+                           affected_rows = mysql_affected_rows(&mysql);
               state = STATE_CONNECTED;
-              return emit("done");
+              return emitDone(insert_id, affected_rows);
             } else
               state = STATE_ROWSTREAM;
             break;
@@ -252,9 +254,12 @@ class Client : public ObjectWrap {
                 state = STATE_RESULTFREE;
               } else {
                 // no more rows
+                my_ulonglong insert_id = mysql_insert_id(&mysql),
+                             affected_rows = mysql_affected_rows(&mysql),
+                             num_rows = mysql_num_rows(mysql_res);
                 mysql_free_result(mysql_res);
                 state = STATE_CONNECTED;
-                return emit("done");
+                return emitDone(insert_id, affected_rows, num_rows);
               }
             }
             break;
@@ -361,6 +366,28 @@ class Client : public ObjectWrap {
       Emit->Call(handle_, 1, emit_argv);
       if (try_catch.HasCaught())
         FatalException(try_catch);
+    }
+
+    void emitDone(my_ulonglong insert_id, my_ulonglong affected_rows,
+                  my_ulonglong num_rows = 0) {
+      HandleScope scope;
+      Local<Function> Emit = Local<Function>::Cast(handle_->Get(emit_symbol));
+      Local<Object> info = Object::New();
+      info->Set(String::New("insertId"), Number::New(insert_id));
+      info->Set(String::New("affectedRows"),
+                Number::New(affected_rows == (my_ulonglong)-1
+                            ? 0
+                            : affected_rows));
+      info->Set(String::New("numRows"), Number::New(num_rows));
+      Local<Value> emit_argv[2] = {
+        String::New("done"),
+        info
+      };
+      TryCatch try_catch;
+      Emit->Call(handle_, 2, emit_argv);
+      if (try_catch.HasCaught())
+        FatalException(try_catch);
+      
     }
 
     void emitRow() {
