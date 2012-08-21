@@ -127,12 +127,12 @@ TODO
 
 * SSL encrypted connections
 
-* Misc. query info (e.g. affected_rows, insert_id, etc)
-
 * Auto-reconnect algorithm(s) ?
+
+* Method to change character set
 
 * Option to use array of field values instead of a fieldName=>value object
 
-* Efficiently detect socket disconnection
+* Periodic server pinging to detect a dead connection
 
 * Possibly some other stuff I'm not aware of at the moment
