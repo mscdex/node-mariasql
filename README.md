@@ -37,26 +37,8 @@ Examples
 ```javascript
 var inspect = require('util').inspect;
 var Client = require('mariasql');
+
 var c = new Client();
-
-c.on('connect', function() {
-  console.log('Connected!');
-
-  var q = c.query("SHOW DATABASES");
-
-  q.on('result', function(result) {
-    console.log('Query result: ' + inspect(result));
-  });
-
-  q.on('error', function(err) {
-    console.log('Query error: ' + err);
-  });
-
-  q.on('end', function() {
-    console.log('Query finished');
-    c.close();
-  });
-});
 
 c.on('error', function(err) {
   console.log('Client error: ' + err);
@@ -65,6 +47,18 @@ c.on('error', function(err) {
 c.on('close', function(had_err) {
   console.log('Closed');
 });
+
+c.query("SHOW DATABASES")
+ .on('result', function(result) {
+   console.log('Query result: ' + inspect(result));
+ })
+ .on('error', function(err) {
+   console.log('Query error: ' + inspect(err));
+ })
+ .on('end', function() {
+   console.log('Query finished successfully');
+   c.end();
+ });
 
 c.connect({
   host: '127.0.0.1',
@@ -88,6 +82,7 @@ Client events
 
 * **close**(<_boolean_>hadError) - The connection was closed. `hadError` is set to true if this was due to a connection-level error.
 
+
 Client methods
 --------------
 
@@ -105,17 +100,31 @@ Client methods
 
     * **db** - <_string_> - A database to automatically select after authentication **Default:** (no db)
 
-* **query**(<_string_>query) - <_EventEmitter_> - Enqueues the given `query` and returns an EventEmitter that emits the following when the query is executed:
-
-    * **result**(<_object_>res) - `res` is an object of fieldName=>value pairs, where value is a string.
-
-    * **end**() - No more results for this query.
-
-    * **error**(<_Error_>err) - An error occurred while executing this query.
+* **query**(<_string_>query) - <_Query_> - Enqueues the given `query` and returns a _Query_ instance.
 
 * **escape**(<_string_>value) - Escapes `value` for use in queries. **_This method requires a live connection_**.
 
-* **close**(<_boolean_>immediately) - If `immediately` is true, the connection is severed even if other queries are still in the queue.
+* **end**() - Closes the connection once all queries in the queue have been executed.
+
+* **destroy**() - Closes the connection immediately, even if there are other queries still in the queue.
+
+
+Query events
+------------
+
+* **result**(<_object_>res) - `res` is an object of fieldName=>value pairs, where value is a string.
+
+* **end**(<_object_>info) - The query finished successfully. `info` contains statistics such as 'affectedRows', 'insertId', and 'numRows.'
+
+* **abort**() - The query was aborted (the 'end' event will not be emitted) by way of query.abort().
+
+* **error**(<_Error_>err) - An error occurred while executing this query (the 'end' event will not be emitted).
+
+
+Query methods
+-------------
+
+* **abort**() - Aborts the query if possible. This currently will not work for "blocking queries" (e.g. "SELECT SLEEP(10000)") that are not generating network traffic (e.g. returning results).
 
 
 TODO
