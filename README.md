@@ -142,6 +142,4 @@ TODO
 
 * Option to use array of field values instead of a fieldName=>value object
 
-* Periodic server pinging to detect a dead connection
-
 * Possibly some other stuff I'm not aware of at the moment

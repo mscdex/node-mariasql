@@ -1,5 +1,6 @@
 #include <node.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <mysql/mysql.h>
 
 using namespace node;
@@ -38,13 +39,29 @@ struct sql_config {
   bool compress;
 };
 
-#include <stdio.h>
-#define DEBUG(s) fprintf(stderr, "BINDING: " s "\n")
+// used with recv peek to check for disconnection during idle,
+// long-running query, etc.
+char* connChk = (char*) malloc(1);
+
+#ifdef _WIN32
+# define CHECK_CONNRESET (WSAGetLastError() == WSAECONNRESET   ||  \
+                          WSAGetLastError() == WSAENOTCONN     ||  \
+                          WSAGetLastError() == WSAECONNABORTED ||  \
+                          WSAGetLastError() == WSAENETRESET    ||  \
+                          WSAGetLastError() == WSAENETDOWN)
+#else
+# define CHECK_CONNRESET (errno == ECONNRESET || errno == ENOTCONN)
+#endif
+
+#define ERROR_HANGUP 10001
+#define STR_ERROR_HANGUP "Disconnected from the server"
+
 #define FREE(v) if (v) { free(v); v = NULL; }
 
 class Client : public ObjectWrap {
   public:
     uv_poll_t poll_handle;
+    uv_os_sock_t mysql_sock;
     MYSQL mysql, *mysql_ret;
     MYSQL_RES *mysql_res;
     MYSQL_ROW mysql_row;
@@ -72,6 +89,7 @@ class Client : public ObjectWrap {
       deferredState = STATE_NULL;
       poll_handle.type = UV_UNKNOWN_HANDLE;
 
+      mysql_sock = NULL;
       mysql_init(&mysql);
       mysql_options(&mysql, MYSQL_OPT_NONBLOCK, 0);
     }
@@ -90,8 +108,15 @@ class Client : public ObjectWrap {
         FREE(config.ip);
         FREE(config.db);
         FREE(cur_query);
-        state = STATE_CLOSE;
-        doWork();
+        uv_poll_stop(&poll_handle);
+        if (mysql_errno(&mysql) == 2013) {
+          mysql_close(&mysql);
+          state = STATE_CLOSED;
+          uv_close((uv_handle_t*) &poll_handle, cbClose);
+        } else {
+          state = STATE_CLOSE;
+          doWork();
+        }
       }
     }
 
@@ -130,8 +155,10 @@ class Client : public ObjectWrap {
                                               config.password,
                                               config.db,
                                               config.port, NULL, 0);
+            mysql_sock = mysql_get_socket(&mysql);
             uv_poll_init_socket(uv_default_loop(), &poll_handle,
-                                mysql_get_socket(&mysql));
+                                mysql_sock);
+            uv_poll_start(&poll_handle, UV_READABLE, cbPoll);
             poll_handle.data = this;
             if (status) {
               done = true;
@@ -335,14 +362,19 @@ class Client : public ObjectWrap {
       uv_poll_start(&poll_handle, new_events, cbPoll);
     }
 
-    void emitError(const char* when, bool doClose = false) {
+    void emitError(const char* when, bool doClose = false,
+                   unsigned int errNo = 0, const char* errMsg = NULL) {
       HandleScope scope;
       hadError = true;
       Local<Function> Emit = Local<Function>::Cast(handle_->Get(emit_symbol));
-      Local<Value> err = Exception::Error(String::New(mysql_error(&mysql)));
+      unsigned int errCode = mysql_errno(&mysql);
+      if (errNo > 0)
+        errCode = errNo;
+        Local<Value> err =
+          Exception::Error(String::New(errMsg ? errMsg : mysql_error(&mysql)));
       Local<Object> err_obj = err->ToObject();
       err_obj->Set(String::New("code"),
-               Integer::NewFromUnsigned(mysql_errno(&mysql)));
+                   Integer::NewFromUnsigned(errCode));
       err_obj->Set(String::New("when"), String::New(when));
       Local<Value> emit_argv[2] = {
         String::New("error"),
@@ -352,7 +384,7 @@ class Client : public ObjectWrap {
       Emit->Call(handle_, 2, emit_argv);
       if (try_catch.HasCaught())
         FatalException(try_catch);
-      if (doClose)
+      if (doClose || errCode == 2013 || errCode == ERROR_HANGUP)
         close();
     }
 
@@ -424,6 +456,13 @@ class Client : public ObjectWrap {
         mysql_status |= MYSQL_WAIT_WRITE;
       /*if (events & UV_TIMEOUT)
         mysql_status |= MYSQL_WAIT_TIMEOUT;*/
+      if (obj->mysql_sock) {
+        // check for connection error
+        int r = recv(obj->mysql_sock, connChk, 1, MSG_PEEK);
+        if (r == 0 || (r == -1 && CHECK_CONNRESET)
+            && obj->state == STATE_CONNECTED)
+          return obj->emitError("conn", true, ERROR_HANGUP, STR_ERROR_HANGUP);
+      }
       obj->doWork(mysql_status);
     }
 
