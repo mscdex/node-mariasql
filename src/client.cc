@@ -50,6 +50,7 @@ char* connChk = (char*) malloc(1);
                           WSAGetLastError() == WSAENETRESET    ||  \
                           WSAGetLastError() == WSAENETDOWN)
 #else
+# include <errno.h>
 # define CHECK_CONNRESET (errno == ECONNRESET || errno == ENOTCONN)
 #endif
 
