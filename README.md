@@ -100,7 +100,7 @@ Client methods
 
     * **db** - <_string_> - A database to automatically select after authentication **Default:** (no db)
 
-* **query**(<_string_>query) - <_Query_> - Enqueues the given `query` and returns a _Query_ instance.
+* **query**(<_string_>query[, <_boolean_>useArray=false]) - <_Query_> - Enqueues the given `query` and returns a _Query_ instance. If `useArray` is set to true, then an array of field values are returned instead of an object of fieldName=>fieldValue pairs.
 
 * **escape**(<_string_>value) - Escapes `value` for use in queries. **_This method requires a live connection_**.
 
@@ -112,13 +112,13 @@ Client methods
 Query events
 ------------
 
-* **result**(<_object_>res) - `res` is an object of fieldName=>value pairs, where value is a string.
-
-* **end**(<_object_>info) - The query finished successfully. `info` contains statistics such as 'affectedRows', 'insertId', and 'numRows.'
+* **result**(<_mixed_>res) - `res` is either an object of fieldName=>fieldValue pairs or array of field values, where each field value is a string (except MySQL NULLs are JavaScript nulls).
 
 * **abort**() - The query was aborted (the 'end' event will not be emitted) by way of query.abort().
 
 * **error**(<_Error_>err) - An error occurred while executing this query (the 'end' event will not be emitted).
+
+* **end**(<_object_>info) - The query finished successfully. `info` contains statistics such as 'affectedRows', 'insertId', and 'numRows.'
 
 
 Query methods
