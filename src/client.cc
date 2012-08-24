@@ -99,7 +99,7 @@ class Client : public ObjectWrap {
       deferred_state = STATE_NULL;
       poll_handle.type = UV_UNKNOWN_HANDLE;
 
-      mysql_sock = NULL;
+      mysql_sock = 0;
       mysql_init(&mysql);
       mysql_options(&mysql, MYSQL_OPT_NONBLOCK, 0);
     }
