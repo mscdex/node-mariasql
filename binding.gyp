@@ -8,9 +8,9 @@
       'include_dirs': [
         'deps/libmysql-maria/include',
       ],
-      'cflags': [ '-O3' ],
       'conditions': [
         [ 'OS=="win"', {
+          'cflags': [ '/O2' ],
           'msvs_settings': {
             'VCLinkerTool': {
               'IgnoreDefaultLibraryNames': ['libcmt.lib'],
@@ -28,6 +28,7 @@
             }]
           ]
         }, {
+          'cflags': [ '-O3' ],
           'libraries': [
             '-l:libmysqlclient.a',
           ],
