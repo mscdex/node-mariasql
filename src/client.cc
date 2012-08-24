@@ -25,11 +25,8 @@ const int STATE_NULL = -100,
           STATE_RESULTFREE = 9,
           STATE_RESULTFREEING = 10,
           STATE_RESULTFREED = 11,
-          STATE_KILL = 12,
-          STATE_KILLING = 13,
-          STATE_KILLED = 14,
-          STATE_RESULTERR = 15,
-          STATE_QUERYABORTED = 16;
+          STATE_RESULTERR = 12,
+          STATE_QUERYABORTED = 13;
 
 struct sql_config {
   char* user;
@@ -152,7 +149,8 @@ class Client : public ObjectWrap {
     }
 
     void abort_query() {
-      if (state >= STATE_QUERY && state <= STATE_ROWSTREAMED) {
+      if (state == STATE_QUERY || state == STATE_QUERIED
+          || (state >= STATE_ROWSTREAM && state <= STATE_ROWSTREAMED)) {
         FREE(cur_query);
         aborting = true;
       }
@@ -224,24 +222,17 @@ class Client : public ObjectWrap {
             }
             break;
           case STATE_QUERYING:
-            if (aborting) {
+            status = mysql_real_query_cont(&mysql_qerr, &mysql,
+                                           mysql_status(event));
+            if (status)
+              done = true;
+            else {
               FREE(cur_query);
-              aborting = false;
-              state = STATE_KILL;
-              deferred_state = STATE_QUERYABORTED;
-            } else {
-              status = mysql_real_query_cont(&mysql_qerr, &mysql,
-                                             mysql_status(event));
-              if (status)
-                done = true;
-              else {
-                FREE(cur_query);
-                if (mysql_qerr) {
-                  state = STATE_CONNECTED;
-                  return emit_error("query.error");
-                }
-                state = STATE_QUERIED;
+              if (mysql_qerr) {
+                state = STATE_CONNECTED;
+                return emit_error("query.error");
               }
+              state = STATE_QUERIED;
             }
             break;
           case STATE_QUERIED:
@@ -302,8 +293,8 @@ class Client : public ObjectWrap {
               emit_row();
             } else {
               if (mysql_errno(&mysql)) {
-                deferred_state = STATE_RESULTERR;
                 state = STATE_RESULTFREE;
+                deferred_state = STATE_RESULTERR;
               } else {
                 // no more rows
                 my_ulonglong insert_id = mysql_insert_id(&mysql),
@@ -313,32 +304,6 @@ class Client : public ObjectWrap {
                 state = STATE_CONNECTED;
                 return emit_done(insert_id, affected_rows, num_rows);
               }
-            }
-            break;
-          case STATE_KILL:
-            char killquery[128];
-            sprintf(killquery, "KILL QUERY %u", mysql_thread_id(&mysql));
-            status = mysql_real_query_start(&mysql_qerr, &mysql, killquery,
-                                            strlen(killquery));
-            if (status) {
-              state = STATE_KILLING;
-              done = true;
-            } else
-              state = STATE_KILLED;
-            break;
-          case STATE_KILLING:
-            status = mysql_real_query_cont(&mysql_qerr, &mysql,
-                                           mysql_status(event));
-            if (status)
-              done = true;
-            else
-              state = STATE_KILLED;
-          case STATE_KILLED:
-            if (deferred_state == STATE_NULL)
-              return emit("query.abort");
-            else {
-              state = deferred_state;
-              deferred_state = STATE_NULL;
             }
             break;
           case STATE_RESULTERR:
@@ -404,7 +369,7 @@ class Client : public ObjectWrap {
         int r = recv(obj->mysql_sock, conn_check_buf, 1, MSG_PEEK);
         if (r == 0 || (r == -1 && CHECK_CONNRESET)
             && obj->state == STATE_CONNECTED)
-          return obj->emit_error("conn", true, ERROR_HANGUP, STR_ERROR_HANGUP);
+          return obj->emit_error("error", true, ERROR_HANGUP, STR_ERROR_HANGUP);
       }
       obj->do_work(mysql_status);
     }
@@ -447,14 +412,14 @@ class Client : public ObjectWrap {
         close();
     }
 
-    void emit_done(my_ulonglong insert_id, my_ulonglong affected_rows,
+    void emit_done(my_ulonglong insert_id = 0, my_ulonglong affected_rows = 0,
                   my_ulonglong num_rows = 0) {
       HandleScope scope;
       Local<Function> Emit = Local<Function>::Cast(handle_->Get(emit_symbol));
       Local<Object> info = Object::New();
       info->Set(String::New("insertId"), Number::New(insert_id));
       info->Set(String::New("affectedRows"),
-                Number::New(affected_rows == (my_ulonglong)-1
+                Number::New(affected_rows == (my_ulonglong) - 1
                             ? 0
                             : affected_rows));
       info->Set(String::New("numRows"), Number::New(num_rows));

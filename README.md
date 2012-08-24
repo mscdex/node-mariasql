@@ -78,7 +78,7 @@ Client properties
 
 * **connected** - <_boolean_> - Set to true if the Client is currently connected.
 
-* **threadId** - <_integer_> - If connected, the thread id of this connection on the server. This is useful for killing (via a secondary Client connection) "stuck" queries that have yet to return by way of "KILL QUERY <threadId>".
+* **threadId** - <_integer_> - If connected, this is the thread id of this connection on the server.
 
 
 Client events
@@ -134,7 +134,7 @@ Query events
 Query methods
 -------------
 
-* **abort**() - _(void)_ - Aborts the query if possible. This currently will not work for a long-running, in-progress query that has neither finished (for non-SELECTs) nor started returning rows.
+* **abort**() - _(void)_ - Aborts query immediately if the query is either currently queued or is (about to start) returning rows (if applicable). If the query is still being processed on the server side, the query will not be aborted until the server finishes processing it (i.e. when rows are about to be returned for SELECT queries). In any case, you can always kill the currently running query early by executing "KILL QUERY <the client's threadId>" from a separate connection.
 
 
 TODO
