@@ -126,7 +126,7 @@ Query events
 Query methods
 -------------
 
-* **abort**() - Aborts the query if possible. This currently will not work for "blocking queries" (e.g. "SELECT SLEEP(10000)") that are not generating network traffic (e.g. returning results).
+* **abort**() - _(void)_ - Aborts the query if possible. This currently will not work for a long-running, in-progress query that has neither finished (for non-SELECTs) nor started returning rows.
 
 
 TODO
