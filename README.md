@@ -102,11 +102,13 @@ Client methods
 
 * **query**(<_string_>query[, <_boolean_>useArray=false]) - <_Query_> - Enqueues the given `query` and returns a _Query_ instance. If `useArray` is set to true, then an array of field values are returned instead of an object of fieldName=>fieldValue pairs.
 
-* **escape**(<_string_>value) - Escapes `value` for use in queries. **_This method requires a live connection_**.
+* **escape**(<_string_>value) - <_string_> - Escapes `value` for use in queries. **_This method requires a live connection_**.
 
-* **end**() - Closes the connection once all queries in the queue have been executed.
+* **end**() - _(void)_ - Closes the connection once all queries in the queue have been executed.
 
-* **destroy**() - Closes the connection immediately, even if there are other queries still in the queue.
+* **destroy**() - _(void)_ - Closes the connection immediately, even if there are other queries still in the queue.
+
+* **isMariaDB**() - <_boolean_> - Returns true if the remote server is MariaDB.
 
 
 Query events
