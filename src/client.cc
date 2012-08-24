@@ -1,4 +1,5 @@
 #include <node.h>
+#include <node_buffer.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <mysql/mysql.h>
@@ -58,6 +59,13 @@ char* connChk = (char*) malloc(1);
 #define STR_ERROR_HANGUP "Disconnected from the server"
 
 #define FREE(v) if (v) { free(v); v = NULL; }
+#define IS_BINARY(f) ((f->flags & BINARY_FLAG) &&             \
+                      ((f->type == MYSQL_TYPE_TINY_BLOB)   || \
+                       (f->type == MYSQL_TYPE_MEDIUM_BLOB) || \
+                       (f->type == MYSQL_TYPE_BLOB)        || \
+                       (f->type == MYSQL_TYPE_LONG_BLOB)   || \
+                       (f->type == MYSQL_TYPE_STRING)      || \
+                       (f->type == MYSQL_TYPE_VAR_STRING)))
 
 class Client : public ObjectWrap {
   public:
@@ -425,15 +433,34 @@ class Client : public ObjectWrap {
 
     void emitRow() {
       HandleScope scope;
-      unsigned int i = 0, len = mysql_num_fields(mysql_res);
-      char* field;
+      MYSQL_FIELD* field;
+      unsigned int i = 0, len = mysql_num_fields(mysql_res)/*,
+                   j = 0, vlen*/;
+      unsigned long* lengths = mysql_fetch_lengths(mysql_res);
       Local<Function> Emit = Local<Function>::Cast(handle_->Get(emit_symbol));
       Local<Object> row = Object::New();
       for (; i<len; ++i) {
-        field = mysql_fetch_field_direct(mysql_res, i)->name;
-        row->Set(String::New(field), (mysql_row[i]
-                                      ? String::New(mysql_row[i])
-                                      : Null()));
+        field = mysql_fetch_field_direct(mysql_res, i);
+        if (mysql_row[i] == NULL)
+          row->Set(String::New(field->name, field->name_length), Null());
+        else {
+          if (IS_BINARY(field)) {
+            /*vlen = lengths[i];
+            uint16_t* newbuf = new uint16_t[vlen];
+            for (j = 0; j < vlen; ++j)
+              newbuf[j] = (uint16_t) mysql_row[i][j];
+            row->Set(String::New(field->name, field->name_length),
+                     String::New(newbuf, vlen));
+            */
+            row->Set(String::New(field->name, field->name_length),
+                     Local<Value>::New(
+                      Buffer::New((char*)mysql_row[i], lengths[i])->handle_
+                     ));
+          } else {
+            row->Set(String::New(field->name, field->name_length),
+                     String::New(mysql_row[i], lengths[i]));
+          }
+        }
       }
       Local<Value> emit_argv[2] = {
         String::New("result"),
