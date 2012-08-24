@@ -140,6 +140,4 @@ TODO
 
 * Method to change character set
 
-* Option to use array of field values instead of a fieldName=>value object
-
 * Possibly some other stuff I'm not aware of at the moment
