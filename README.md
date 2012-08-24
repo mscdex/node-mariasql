@@ -73,6 +73,14 @@ API
 
 require('mariasql') returns a **_Client_** object
 
+Client properties
+-----------------
+
+* **connected** - <_boolean_> - Set to true if the Client is currently connected.
+
+* **threadId** - <_integer_> - If connected, the thread id of this connection on the server. This is useful for killing (via a secondary Client connection) "stuck" queries that have yet to return by way of "KILL QUERY <threadId>".
+
+
 Client events
 -------------
 
