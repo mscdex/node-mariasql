@@ -130,6 +130,20 @@ class Client : public ObjectWrap {
       }
     }
 
+    static void cb_close(uv_handle_t* handle) {
+      HandleScope scope;
+      Client* obj = (Client*) handle->data;
+      Local<Function> Emit = Local<Function>::Cast(obj->handle_->Get(emit_symbol));
+      TryCatch try_catch;
+      Local<Value> emit_argv[2] = {
+        String::New("close"),
+        Local<Boolean>::New(Boolean::New(obj->had_error))
+      };
+      Emit->Call(obj->handle_, 2, emit_argv);
+      if (try_catch.HasCaught())
+        FatalException(try_catch);
+    }
+
     char* escape(const char* str) {
       unsigned int str_len = strlen(str);
       char* dest = (char*) malloc(str_len * 2 + 1);
@@ -373,6 +387,40 @@ class Client : public ObjectWrap {
       uv_poll_start(&poll_handle, new_events, cb_poll);
     }
 
+    static void cb_poll(uv_poll_t* handle, int status, int events) {
+      HandleScope scope;
+      Client* obj = (Client*) handle->data;
+      assert(status == 0);
+
+      int mysql_status = 0;
+      if (events & UV_READABLE)
+        mysql_status |= MYSQL_WAIT_READ;
+      if (events & UV_WRITABLE)
+        mysql_status |= MYSQL_WAIT_WRITE;
+      /*if (events & UV_TIMEOUT)
+        mysql_status |= MYSQL_WAIT_TIMEOUT;*/
+      if (obj->mysql_sock) {
+        // check for connection error
+        int r = recv(obj->mysql_sock, conn_check_buf, 1, MSG_PEEK);
+        if (r == 0 || (r == -1 && CHECK_CONNRESET)
+            && obj->state == STATE_CONNECTED)
+          return obj->emit_error("conn", true, ERROR_HANGUP, STR_ERROR_HANGUP);
+      }
+      obj->do_work(mysql_status);
+    }
+
+    void emit(const char* eventName) {
+      HandleScope scope;
+      Local<Function> Emit = Local<Function>::Cast(handle_->Get(emit_symbol));
+      Local<Value> emit_argv[1] = {
+        String::New(eventName)
+      };
+      TryCatch try_catch;
+      Emit->Call(handle_, 1, emit_argv);
+      if (try_catch.HasCaught())
+        FatalException(try_catch);
+    }
+
     void emit_error(const char* eventName, bool doClose = false,
                    unsigned int errNo = 0, const char* errMsg = NULL) {
       HandleScope scope;
@@ -397,18 +445,6 @@ class Client : public ObjectWrap {
         FatalException(try_catch);
       if (doClose || errCode == 2013 || errCode == ERROR_HANGUP)
         close();
-    }
-
-    void emit(const char* eventName) {
-      HandleScope scope;
-      Local<Function> Emit = Local<Function>::Cast(handle_->Get(emit_symbol));
-      Local<Value> emit_argv[1] = {
-        String::New(eventName)
-      };
-      TryCatch try_catch;
-      Emit->Call(handle_, 1, emit_argv);
-      if (try_catch.HasCaught())
-        FatalException(try_catch);
     }
 
     void emit_done(my_ulonglong insert_id, my_ulonglong affected_rows,
@@ -471,42 +507,6 @@ class Client : public ObjectWrap {
       };
       TryCatch try_catch;
       Emit->Call(handle_, 2, emit_argv);
-      if (try_catch.HasCaught())
-        FatalException(try_catch);
-    }
-
-    static void cb_poll(uv_poll_t* handle, int status, int events) {
-      HandleScope scope;
-      Client* obj = (Client*) handle->data;
-      assert(status == 0);
-
-      int mysql_status = 0;
-      if (events & UV_READABLE)
-        mysql_status |= MYSQL_WAIT_READ;
-      if (events & UV_WRITABLE)
-        mysql_status |= MYSQL_WAIT_WRITE;
-      /*if (events & UV_TIMEOUT)
-        mysql_status |= MYSQL_WAIT_TIMEOUT;*/
-      if (obj->mysql_sock) {
-        // check for connection error
-        int r = recv(obj->mysql_sock, conn_check_buf, 1, MSG_PEEK);
-        if (r == 0 || (r == -1 && CHECK_CONNRESET)
-            && obj->state == STATE_CONNECTED)
-          return obj->emit_error("conn", true, ERROR_HANGUP, STR_ERROR_HANGUP);
-      }
-      obj->do_work(mysql_status);
-    }
-
-    static void cb_close(uv_handle_t* handle) {
-      HandleScope scope;
-      Client* obj = (Client*) handle->data;
-      Local<Function> Emit = Local<Function>::Cast(obj->handle_->Get(emit_symbol));
-      TryCatch try_catch;
-      Local<Value> emit_argv[2] = {
-        String::New("close"),
-        Local<Boolean>::New(Boolean::New(obj->had_error))
-      };
-      Emit->Call(obj->handle_, 2, emit_argv);
       if (try_catch.HasCaught())
         FatalException(try_catch);
     }
@@ -600,7 +600,7 @@ class Client : public ObjectWrap {
       return Undefined();
     }
 
-    static Handle<Value> abort_query(const Arguments& args) {
+    static Handle<Value> AbortQuery(const Arguments& args) {
       HandleScope scope;
       Client* obj = ObjectWrap::Unwrap<Client>(args.This());
       obj->abort_query();
@@ -662,7 +662,7 @@ class Client : public ObjectWrap {
 
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "connect", Connect);
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "query", Query);
-      NODE_SET_PROTOTYPE_METHOD(Client_constructor, "abort_query", abort_query);
+      NODE_SET_PROTOTYPE_METHOD(Client_constructor, "abortQuery", AbortQuery);
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "escape", Escape);
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "end", Close);
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "isMariaDB", IsMariaDB);
