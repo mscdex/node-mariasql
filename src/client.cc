@@ -647,7 +647,7 @@ class Client : public ObjectWrap {
           String::New("Not connected"))
         );
       }
-      return scope.Close(Boolean::New(mariadb_connection(&obj->mysql)));
+      return scope.Close(Boolean::New(mariadb_connection(&obj->mysql) == 1));
     }
 
     static void Initialize(Handle<Object> target) {
