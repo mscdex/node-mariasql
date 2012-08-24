@@ -428,14 +428,14 @@ class Client : public ObjectWrap {
       Emit->Call(handle_, 2, emit_argv);
       if (try_catch.HasCaught())
         FatalException(try_catch);
-      
     }
 
     void emitRow() {
       HandleScope scope;
       MYSQL_FIELD* field;
-      unsigned int i = 0, len = mysql_num_fields(mysql_res)/*,
-                   j = 0, vlen*/;
+      unsigned int i = 0, len = mysql_num_fields(mysql_res),
+                   j = 0, vlen;
+      unsigned char *buf;
       unsigned long* lengths = mysql_fetch_lengths(mysql_res);
       Local<Function> Emit = Local<Function>::Cast(handle_->Get(emit_symbol));
       Local<Object> row = Object::New();
@@ -445,17 +445,13 @@ class Client : public ObjectWrap {
           row->Set(String::New(field->name, field->name_length), Null());
         else {
           if (IS_BINARY(field)) {
-            /*vlen = lengths[i];
+            vlen = lengths[i];
+            buf = (unsigned char*)(mysql_row[i]);
             uint16_t* newbuf = new uint16_t[vlen];
             for (j = 0; j < vlen; ++j)
-              newbuf[j] = (uint16_t) mysql_row[i][j];
+              newbuf[j] = buf[j];
             row->Set(String::New(field->name, field->name_length),
                      String::New(newbuf, vlen));
-            */
-            row->Set(String::New(field->name, field->name_length),
-                     Local<Value>::New(
-                      Buffer::New((char*)mysql_row[i], lengths[i])->handle_
-                     ));
           } else {
             row->Set(String::New(field->name, field->name_length),
                      String::New(mysql_row[i], lengths[i]));
