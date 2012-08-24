@@ -66,7 +66,7 @@ char* conn_check_buf = (char*) malloc(1);
 
 class Client : public ObjectWrap {
   public:
-    uv_poll_t poll_handle;
+    uv_poll_t* poll_handle;
     uv_os_sock_t mysql_sock;
     MYSQL mysql, *mysql_ret;
     MYSQL_RES *mysql_res;
@@ -75,7 +75,7 @@ class Client : public ObjectWrap {
     char* cur_query;
     bool query_use_array;
     sql_config config;
-    bool had_error, aborting;
+    bool had_error, aborting, destructing;
     int state, deferred_state;
 
     Client() {
@@ -83,6 +83,7 @@ class Client : public ObjectWrap {
     }
 
     ~Client() {
+      destructing = true;
       close();
     }
 
@@ -92,9 +93,9 @@ class Client : public ObjectWrap {
       config.ip = NULL;
       config.db = NULL;
       cur_query = NULL;
-      had_error = aborting = false;
+      had_error = aborting = destructing = false;
       deferred_state = STATE_NULL;
-      poll_handle.type = UV_UNKNOWN_HANDLE;
+      poll_handle = NULL;
 
       mysql_sock = 0;
       mysql_init(&mysql);
@@ -109,17 +110,21 @@ class Client : public ObjectWrap {
     }
 
     void close() {
+      FREE(config.user);
+      FREE(config.password);
+      FREE(config.ip);
+      FREE(config.db);
+      FREE(cur_query);
       if (state != STATE_CLOSED) {
-        FREE(config.user);
-        FREE(config.password);
-        FREE(config.ip);
-        FREE(config.db);
-        FREE(cur_query);
-        uv_poll_stop(&poll_handle);
-        if (mysql_errno(&mysql) == 2013) {
+        if (destructing) {
+          if (poll_handle)
+            uv_poll_stop(poll_handle);
+          FREE(poll_handle);
+          mysql_close(&mysql);
+        } else if (mysql_errno(&mysql) == 2013) {
           mysql_close(&mysql);
           state = STATE_CLOSED;
-          uv_close((uv_handle_t*) &poll_handle, cb_close);
+          uv_close((uv_handle_t*) poll_handle, cb_close);
         } else {
           state = STATE_CLOSE;
           do_work();
@@ -139,6 +144,7 @@ class Client : public ObjectWrap {
       Emit->Call(obj->handle_, 2, emit_argv);
       if (try_catch.HasCaught())
         FatalException(try_catch);
+      FREE(obj->poll_handle);
     }
 
     char* escape(const char* str) {
@@ -179,10 +185,11 @@ class Client : public ObjectWrap {
                                               config.db,
                                               config.port, NULL, 0);
             mysql_sock = mysql_get_socket(&mysql);
-            uv_poll_init_socket(uv_default_loop(), &poll_handle,
+            poll_handle = (uv_poll_t*)malloc(sizeof(uv_poll_t));
+            uv_poll_init_socket(uv_default_loop(), poll_handle,
                                 mysql_sock);
-            uv_poll_start(&poll_handle, UV_READABLE, cb_poll);
-            poll_handle.data = this;
+            uv_poll_start(poll_handle, UV_READABLE|UV_WRITABLE, cb_poll);
+            poll_handle->data = this;
             if (status) {
               done = true;
               state = STATE_CONNECTING;
@@ -339,7 +346,7 @@ class Client : public ObjectWrap {
           case STATE_CLOSE:
             mysql_close(&mysql);
             state = STATE_CLOSED;
-            uv_close((uv_handle_t*) &poll_handle, cb_close);
+            uv_close((uv_handle_t*) poll_handle, cb_close);
             return;
           case STATE_CLOSED:
             return;
@@ -349,7 +356,7 @@ class Client : public ObjectWrap {
         new_events |= UV_READABLE;
       if (status & MYSQL_WAIT_WRITE)
         new_events |= UV_WRITABLE;
-      uv_poll_start(&poll_handle, new_events, cb_poll);
+      uv_poll_start(poll_handle, new_events, cb_poll);
     }
 
     static void cb_poll(uv_poll_t* handle, int status, int events) {
