@@ -494,6 +494,7 @@ class Client : public ObjectWrap {
 
       Client* obj = new Client();
       obj->Wrap(args.This());
+      obj->Ref();
 
       return args.This();
     }
