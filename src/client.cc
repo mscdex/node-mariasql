@@ -474,12 +474,12 @@ class Client : public ObjectWrap {
                   my_ulonglong num_rows = 0) {
       HandleScope scope;
       Local<Object> info = Object::New();
-      info->Set(insert_id_symbol, Integer::New(insert_id));
+      info->Set(insert_id_symbol, Number::New(insert_id));
       info->Set(affected_rows_symbol,
-                Integer::New(affected_rows == (my_ulonglong) - 1
+                Number::New(affected_rows == (my_ulonglong) - 1
                              ? 0
                              : affected_rows));
-      info->Set(num_rows_symbol, Integer::New(num_rows));
+      info->Set(num_rows_symbol, Number::New(num_rows));
       Handle<Value> emit_argv[2] = { qdone_symbol, info };
       TryCatch try_catch;
       Emit->Call(handle_, 2, emit_argv);
@@ -671,7 +671,7 @@ class Client : public ObjectWrap {
           String::New("Not connected"))
         );
       }
-      return scope.Close(Integer::New(mysql_thread_id(&obj->mysql)));
+      return scope.Close(Number::New(mysql_thread_id(&obj->mysql)));
     }
 
     static Handle<Value> Query(const Arguments& args) {
