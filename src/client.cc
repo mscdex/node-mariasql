@@ -52,6 +52,15 @@ struct sql_config {
   bool compress;
 };
 
+struct sql_query {
+  MYSQL_RES *result;
+  MYSQL_ROW row;
+  int err;
+  char *str;
+  bool use_array;
+  bool aborting;
+};
+
 // used with recv peek to check for disconnection during idle,
 // long-running query, etc.
 char* conn_check_buf = (char*) malloc(1);
@@ -84,13 +93,9 @@ class Client : public ObjectWrap {
     uv_poll_t* poll_handle;
     uv_os_sock_t mysql_sock;
     MYSQL mysql, *mysql_ret;
-    MYSQL_RES *mysql_res;
-    MYSQL_ROW mysql_row;
-    int mysql_qerr;
-    char* cur_query;
-    bool query_use_array;
+    sql_query cur_query;
     sql_config config;
-    bool had_error, aborting, destructing;
+    bool had_error, destructing;
     int state, deferred_state;
 
     Client() {
@@ -107,10 +112,15 @@ class Client : public ObjectWrap {
       config.password = NULL;
       config.ip = NULL;
       config.db = NULL;
-      cur_query = NULL;
-      had_error = aborting = destructing = false;
+      had_error = destructing = false;
       deferred_state = STATE_NULL;
       poll_handle = NULL;
+
+      cur_query.result = NULL;
+      cur_query.err = 0;
+      cur_query.str = NULL;
+      cur_query.use_array = false;
+      cur_query.aborting = false;
 
       mysql_sock = 0;
       mysql_init(&mysql);
@@ -129,7 +139,13 @@ class Client : public ObjectWrap {
       FREE(config.password);
       FREE(config.ip);
       FREE(config.db);
-      FREE(cur_query);
+
+      FREE(cur_query.result);
+      cur_query.err = 0;
+      FREE(cur_query.str);
+      cur_query.use_array = false;
+      cur_query.aborting = false;
+
       if (state != STATE_CLOSED) {
         if (destructing) {
           if (poll_handle)
@@ -171,16 +187,16 @@ class Client : public ObjectWrap {
     void abort_query() {
       if (state == STATE_QUERY || state == STATE_QUERIED
           || (state >= STATE_ROWSTREAM && state <= STATE_ROWSTREAMED)) {
-        FREE(cur_query);
-        aborting = true;
+        FREE(cur_query.str);
+        cur_query.aborting = true;
       }
     }
 
     void query(const char* qry, bool use_array = false) {
       if (state == STATE_CONNECTED) {
-        FREE(cur_query);
-        cur_query = strdup(qry);
-        query_use_array = use_array;
+        FREE(cur_query.str);
+        cur_query.str = strdup(qry);
+        cur_query.use_array = use_array;
         state = STATE_QUERY;
         do_work();
       }
@@ -226,30 +242,31 @@ class Client : public ObjectWrap {
           case STATE_CONNECTED:
             return;
           case STATE_QUERY:
-            if (aborting) {
-              FREE(cur_query);
-              aborting = false;
+            if (cur_query.aborting) {
+              FREE(cur_query.str);
+              cur_query.aborting = false;
               state = STATE_CONNECTED;
               return emit("query.abort");
             }
-            status = mysql_real_query_start(&mysql_qerr, &mysql, cur_query,
-                                            strlen(cur_query));
+            status = mysql_real_query_start(&cur_query.err, &mysql,
+                                            cur_query.str,
+                                            strlen(cur_query.str));
             if (status) {
               state = STATE_QUERYING;
               done = true;
             } else {
-              FREE(cur_query);
+              FREE(cur_query.str);
               state = STATE_QUERIED;
             }
             break;
           case STATE_QUERYING:
-            status = mysql_real_query_cont(&mysql_qerr, &mysql,
+            status = mysql_real_query_cont(&cur_query.err, &mysql,
                                            mysql_status(event));
             if (status)
               done = true;
             else {
-              FREE(cur_query);
-              if (mysql_qerr) {
+              FREE(cur_query.str);
+              if (cur_query.err) {
                 state = STATE_CONNECTED;
                 return emit_error("query.error");
               }
@@ -257,13 +274,13 @@ class Client : public ObjectWrap {
             }
             break;
           case STATE_QUERIED:
-            if (aborting) {
-              aborting = false;
+            if (cur_query.aborting) {
+              cur_query.aborting = false;
               state = STATE_CONNECTED;
               return emit("query.abort");
             }
-            mysql_res = mysql_use_result(&mysql);
-            if (!mysql_res) {
+            cur_query.result = mysql_use_result(&mysql);
+            if (!cur_query.result) {
               if (mysql_errno(&mysql)) {
                 state = STATE_CONNECTED;
                 return emit_error("query.error");
@@ -276,13 +293,13 @@ class Client : public ObjectWrap {
               state = STATE_ROWSTREAM;
             break;
           case STATE_ROWSTREAM:
-            if (aborting) {
-              aborting = false;
+            if (cur_query.aborting) {
+              cur_query.aborting = false;
               state = STATE_RESULTFREE;
               deferred_state = STATE_QUERYABORTED;
               return;
             }
-            status = mysql_fetch_row_start(&mysql_row, mysql_res);
+            status = mysql_fetch_row_start(&cur_query.row, cur_query.result);
             if (status) {
               done = true;
               state = STATE_ROWSTREAMING;
@@ -290,13 +307,13 @@ class Client : public ObjectWrap {
               state = STATE_ROWSTREAMED;
             break;
           case STATE_ROWSTREAMING:
-            if (aborting) {
-              aborting = false;
+            if (cur_query.aborting) {
+              cur_query.aborting = false;
               state = STATE_RESULTFREE;
               deferred_state = STATE_QUERYABORTED;
               return;
             }
-            status = mysql_fetch_row_cont(&mysql_row, mysql_res,
+            status = mysql_fetch_row_cont(&cur_query.row, cur_query.result,
                                           mysql_status(event));
             if (status)
               done = true;
@@ -304,12 +321,12 @@ class Client : public ObjectWrap {
               state = STATE_ROWSTREAMED;
             break;
           case STATE_ROWSTREAMED:
-            if (aborting) {
-              aborting = false;
+            if (cur_query.aborting) {
+              cur_query.aborting = false;
               state = STATE_RESULTFREE;
               deferred_state = STATE_QUERYABORTED;
               done = true;
-            } else if (mysql_row) {
+            } else if (cur_query.row) {
               state = STATE_ROWSTREAM;
               emit_row();
             } else {
@@ -320,8 +337,8 @@ class Client : public ObjectWrap {
                 // no more rows
                 my_ulonglong insert_id = mysql_insert_id(&mysql),
                              affected_rows = mysql_affected_rows(&mysql),
-                             num_rows = mysql_num_rows(mysql_res);
-                mysql_free_result(mysql_res);
+                             num_rows = mysql_num_rows(cur_query.result);
+                mysql_free_result(cur_query.result);
                 state = STATE_CONNECTED;
                 return emit_done(insert_id, affected_rows, num_rows);
               }
@@ -334,7 +351,7 @@ class Client : public ObjectWrap {
             state = STATE_CONNECTED;
             return emit("query.abort");
           case STATE_RESULTFREE:
-            status = mysql_free_result_start(mysql_res);
+            status = mysql_free_result_start(cur_query.result);
             if (status) {
               state = STATE_RESULTFREEING;
               done = true;
@@ -342,7 +359,8 @@ class Client : public ObjectWrap {
               state = STATE_RESULTFREED;
             break;
           case STATE_RESULTFREEING:
-            status = mysql_free_result_cont(mysql_res, mysql_status(event));
+            status = mysql_free_result_cont(cur_query.result,
+                                            mysql_status(event));
             if (status)
               done = true;
             else
@@ -454,31 +472,31 @@ class Client : public ObjectWrap {
     void emit_row() {
       HandleScope scope;
       MYSQL_FIELD* field;
-      unsigned int f = 0, n_fields = mysql_num_fields(mysql_res),
+      unsigned int f = 0, n_fields = mysql_num_fields(cur_query.result),
                    i = 0, vlen;
       unsigned char *buf;
       uint16_t* new_buf;
-      unsigned long* lengths = mysql_fetch_lengths(mysql_res);
+      unsigned long* lengths = mysql_fetch_lengths(cur_query.result);
       Handle<Value> field_value;
       Local<Object> row;
-      if (query_use_array)
+      if (cur_query.use_array)
         row = Array::New(n_fields);
       else
         row = Object::New();
       for (; f<n_fields; ++f) {
-        field = mysql_fetch_field_direct(mysql_res, f);
-        if (mysql_row[f] == NULL)
+        field = mysql_fetch_field_direct(cur_query.result, f);
+        if (cur_query.row[f] == NULL)
           field_value = Null();
         else if (IS_BINARY(field)) {
           vlen = lengths[f];
-          buf = (unsigned char*)(mysql_row[f]);
+          buf = (unsigned char*)(cur_query.row[f]);
           new_buf = new uint16_t[vlen];
           for (i = 0; i < vlen; ++i)
             new_buf[i] = buf[i];
           field_value = String::New(new_buf, vlen);
         } else
-          field_value = String::New(mysql_row[f], lengths[f]);
-        if (query_use_array)
+          field_value = String::New(cur_query.row[f], lengths[f]);
+        if (cur_query.use_array)
           row->Set(f, field_value);
         else
           row->Set(String::New(field->name, field->name_length), field_value);
@@ -506,8 +524,11 @@ class Client : public ObjectWrap {
       obj->Wrap(args.This());
       obj->Ref();
 
-      if (Emit.IsEmpty())
-        Emit = Persistent<Function>::New(Local<Function>::Cast(obj->handle_->Get(emit_symbol)));
+      if (Emit.IsEmpty()) {
+        Emit = Persistent<Function>::New(
+                  Local<Function>::Cast(obj->handle_->Get(emit_symbol))
+               );
+      }
 
       return args.This();
     }
