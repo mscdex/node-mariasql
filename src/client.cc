@@ -60,6 +60,8 @@ struct sql_config {
 struct sql_query {
   MYSQL_RES *result;
   MYSQL_ROW row;
+  //Persistent<ObjectTemplate> row_template;
+  Persistent<String> *column_names;
   int err;
   char *str;
   bool use_array;
@@ -84,14 +86,23 @@ char *conn_check_buf = (char*) malloc(1);
 #define ERROR_HANGUP 10001
 #define STR_ERROR_HANGUP "Disconnected from the server"
 
-#define FREE(v) if (v) { free(v); v = NULL; }
-#define IS_BINARY(f) ((f->flags & BINARY_FLAG) &&             \
-                      ((f->type == MYSQL_TYPE_TINY_BLOB)   || \
-                       (f->type == MYSQL_TYPE_MEDIUM_BLOB) || \
-                       (f->type == MYSQL_TYPE_BLOB)        || \
-                       (f->type == MYSQL_TYPE_LONG_BLOB)   || \
-                       (f->type == MYSQL_TYPE_STRING)      || \
-                       (f->type == MYSQL_TYPE_VAR_STRING)))
+#define FREE(p) if (p) { free(p); p = NULL; }
+#define FREE_PERSIST(h) if (!h.IsEmpty()) { h.Dispose(); h.Clear(); }
+#define FREE_PERSISTARRAY(a,t) \
+          if (a) {                                                            \
+            for (unsigned int i = 0, len = sizeof(a) / sizeof(Persistent<t>); \
+                 i < len; ++i)                                                \
+              FREE_PERSIST(a[i]);                                             \
+            FREE(a);                                                          \
+            a = NULL;                                                         \
+          }
+#define IS_BINARY(f) ((f.flags & BINARY_FLAG) &&             \
+                      ((f.type == MYSQL_TYPE_TINY_BLOB)   || \
+                       (f.type == MYSQL_TYPE_MEDIUM_BLOB) || \
+                       (f.type == MYSQL_TYPE_BLOB)        || \
+                       (f.type == MYSQL_TYPE_LONG_BLOB)   || \
+                       (f.type == MYSQL_TYPE_STRING)      || \
+                       (f.type == MYSQL_TYPE_VAR_STRING)))
 
 class Client : public ObjectWrap {
   public:
@@ -122,6 +133,7 @@ class Client : public ObjectWrap {
       poll_handle = NULL;
 
       cur_query.result = NULL;
+      cur_query.column_names = NULL;
       cur_query.err = 0;
       cur_query.str = NULL;
       cur_query.use_array = false;
@@ -146,6 +158,8 @@ class Client : public ObjectWrap {
       FREE(config.db);
 
       FREE(cur_query.result);
+      //FREE_PERSIST(cur_query.row_template);
+      FREE_PERSISTARRAY(cur_query.column_names, String);
       cur_query.err = 0;
       FREE(cur_query.str);
       cur_query.use_array = false;
@@ -346,6 +360,8 @@ class Client : public ObjectWrap {
                 mysql_free_result(cur_query.result);
                 cur_query.result = NULL;
                 state = STATE_CONNECTED;
+                //FREE_PERSIST(cur_query.row_template);
+                FREE_PERSISTARRAY(cur_query.column_names, String);
                 return emit_done(insert_id, affected_rows, num_rows);
               }
             }
@@ -375,6 +391,8 @@ class Client : public ObjectWrap {
           case STATE_RESULTFREED:
             state = STATE_CONNECTED;
             cur_query.result = NULL;
+            //FREE_PERSIST(cur_query.row_template);
+            FREE_PERSISTARRAY(cur_query.column_names, String);
             if (deferred_state == STATE_NULL)
               return emit(qabort_symbol);
             else {
@@ -456,12 +474,12 @@ class Client : public ObjectWrap {
                   my_ulonglong num_rows = 0) {
       HandleScope scope;
       Local<Object> info = Object::New();
-      info->Set(insert_id_symbol, Number::New(insert_id));
+      info->Set(insert_id_symbol, Integer::New(insert_id));
       info->Set(affected_rows_symbol,
-                Number::New(affected_rows == (my_ulonglong) - 1
-                            ? 0
-                            : affected_rows));
-      info->Set(num_rows_symbol, Number::New(num_rows));
+                Integer::New(affected_rows == (my_ulonglong) - 1
+                             ? 0
+                             : affected_rows));
+      info->Set(num_rows_symbol, Integer::New(num_rows));
       Handle<Value> emit_argv[2] = { qdone_symbol, info };
       TryCatch try_catch;
       Emit->Call(handle_, 2, emit_argv);
@@ -471,35 +489,69 @@ class Client : public ObjectWrap {
 
     void emit_row() {
       HandleScope scope;
-      MYSQL_FIELD *field;
+      MYSQL_FIELD field, *fields;
       unsigned int f = 0, n_fields = mysql_num_fields(cur_query.result),
                    i = 0, vlen;
       unsigned char *buf;
       uint16_t *new_buf;
-      unsigned long *lengths = mysql_fetch_lengths(cur_query.result);
+      unsigned long *lengths;
       Handle<Value> field_value;
       Local<Object> row;
+      if (n_fields == 0)
+        return;
+      lengths = mysql_fetch_lengths(cur_query.result);
+      fields = mysql_fetch_fields(cur_query.result);
       if (cur_query.use_array)
         row = Array::New(n_fields);
-      else
+      else {
+        if (!cur_query.column_names) {
+          cur_query.column_names =
+            (Persistent<String>*) malloc(sizeof(Persistent<String>) * n_fields);
+          for (f = 0; f < n_fields; ++f) {
+            field = fields[f];
+            cur_query.column_names[f] = Persistent<String>::New(
+                                            String::New(field.name,
+                                                        field.name_length)
+                                        );
+          }
+        }
         row = Object::New();
-      for (; f<n_fields; ++f) {
-        field = mysql_fetch_field_direct(cur_query.result, f);
+        /*if (cur_query.row_template.IsEmpty()) {
+          Local<ObjectTemplate> tpl = ObjectTemplate::New();
+          cur_query.column_names =
+            (Persistent<String>*) malloc(sizeof(Persistent<String>) * n_fields);
+          for (f = 0; f < n_fields; ++f) {
+            field = fields[f];
+            cur_query.column_names[f] = Persistent<String>::New(
+                                            String::New(field.name,
+                                                        field.name_length)
+                                        );
+            tpl->Set(
+              cur_query.column_names[f],
+              Undefined()
+            );
+          }
+          cur_query.row_template = Persistent<ObjectTemplate>::New(tpl);
+        }
+        row = cur_query.row_template->NewInstance();*/
+      }
+      for (f = 0; f < n_fields; ++f) {
         if (cur_query.row[f] == NULL)
           field_value = Null();
-        else if (IS_BINARY(field)) {
+        else if (IS_BINARY(fields[f])) {
           vlen = lengths[f];
           buf = (unsigned char*)(cur_query.row[f]);
           new_buf = new uint16_t[vlen];
           for (i = 0; i < vlen; ++i)
             new_buf[i] = buf[i];
           field_value = String::New(new_buf, vlen);
+          delete new_buf;
         } else
           field_value = String::New(cur_query.row[f], lengths[f]);
         if (cur_query.use_array)
           row->Set(f, field_value);
         else
-          row->Set(String::New(field->name, field->name_length), field_value);
+          row->Set(cur_query.column_names[f], field_value);
       }
       Handle<Value> emit_argv[2] = { qresult_symbol, row };
       TryCatch try_catch;
