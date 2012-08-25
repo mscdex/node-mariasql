@@ -388,7 +388,7 @@ class Client : public ObjectWrap {
       if (obj->mysql_sock) {
         // check for connection error
         int r = recv(obj->mysql_sock, conn_check_buf, 1, MSG_PEEK);
-        if (r == 0 || (r == -1 && CHECK_CONNRESET)
+        if ((r == 0 || (r == -1 && CHECK_CONNRESET))
             && obj->state == STATE_CONNECTED)
           return obj->emit_error("error", true, ERROR_HANGUP, STR_ERROR_HANGUP);
       }
