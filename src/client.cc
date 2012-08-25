@@ -8,10 +8,16 @@ using namespace node;
 using namespace v8;
 
 static Persistent<FunctionTemplate> Client_constructor;
+static Persistent<Function> Emit;
 static Persistent<String> emit_symbol;
-static Persistent<String> result_symbol;
-static Persistent<String> done_symbol;
+static Persistent<String> connect_symbol;
+static Persistent<String> reserr_symbol;
+static Persistent<String> qresult_symbol;
+static Persistent<String> qerr_symbol;
+static Persistent<String> qabort_symbol;
+static Persistent<String> qdone_symbol;
 static Persistent<String> code_symbol;
+static Persistent<String> err_symbol;
 static Persistent<String> close_symbol;
 static Persistent<String> insert_id_symbol;
 static Persistent<String> affected_rows_symbol;
@@ -23,7 +29,6 @@ static Persistent<String> cfg_port_symbol;
 static Persistent<String> cfg_db_symbol;
 static Persistent<String> cfg_compress_symbol;
 static Persistent<String> cfg_ssl_symbol;
-static Persistent<Function> Emit;
 
 const int STATE_NULL = -100,
           STATE_CLOSE = -2,
@@ -225,7 +230,7 @@ class Client : public ObjectWrap {
               state = STATE_CONNECTING;
             } else {
               state = STATE_CONNECTED;
-              return emit("connect");
+              return emit(connect_symbol);
             }
             break;
           case STATE_CONNECTING:
@@ -234,9 +239,9 @@ class Client : public ObjectWrap {
               done = true;
             else {
               if (!mysql_ret)
-                return emit_error("conn.error", true);
+                return emit_error(err_symbol, true);
               state = STATE_CONNECTED;
-              return emit("connect");
+              return emit(connect_symbol);
             }
             break;
           case STATE_CONNECTED:
@@ -246,7 +251,7 @@ class Client : public ObjectWrap {
               FREE(cur_query.str);
               cur_query.aborting = false;
               state = STATE_CONNECTED;
-              return emit("query.abort");
+              return emit(qabort_symbol);
             }
             status = mysql_real_query_start(&cur_query.err, &mysql,
                                             cur_query.str,
@@ -268,7 +273,7 @@ class Client : public ObjectWrap {
               FREE(cur_query.str);
               if (cur_query.err) {
                 state = STATE_CONNECTED;
-                return emit_error("query.error");
+                return emit_error(qerr_symbol);
               }
               state = STATE_QUERIED;
             }
@@ -277,13 +282,13 @@ class Client : public ObjectWrap {
             if (cur_query.aborting) {
               cur_query.aborting = false;
               state = STATE_CONNECTED;
-              return emit("query.abort");
+              return emit(qabort_symbol);
             }
             cur_query.result = mysql_use_result(&mysql);
             if (!cur_query.result) {
               if (mysql_errno(&mysql)) {
                 state = STATE_CONNECTED;
-                return emit_error("query.error");
+                return emit_error(qerr_symbol);
               }
               my_ulonglong insert_id = mysql_insert_id(&mysql),
                            affected_rows = mysql_affected_rows(&mysql);
@@ -346,10 +351,10 @@ class Client : public ObjectWrap {
             break;
           case STATE_RESULTERR:
             state = STATE_CONNECTED;
-            return emit_error("result.error");
+            return emit_error(reserr_symbol);
           case STATE_QUERYABORTED:
             state = STATE_CONNECTED;
-            return emit("query.abort");
+            return emit(qabort_symbol);
           case STATE_RESULTFREE:
             status = mysql_free_result_start(cur_query.result);
             if (status) {
@@ -369,7 +374,7 @@ class Client : public ObjectWrap {
           case STATE_RESULTFREED:
             state = STATE_CONNECTED;
             if (deferred_state == STATE_NULL)
-              return emit("query.abort");
+              return emit(qabort_symbol);
             else {
               state = deferred_state;
               deferred_state = STATE_NULL;
@@ -407,24 +412,24 @@ class Client : public ObjectWrap {
         // check for connection error
         int r = recv(obj->mysql_sock, conn_check_buf, 1, MSG_PEEK);
         if ((r == 0 || (r == -1 && CHECK_CONNRESET))
-            && obj->state == STATE_CONNECTED)
-          return obj->emit_error("error", true, ERROR_HANGUP, STR_ERROR_HANGUP);
+            && obj->state == STATE_CONNECTED) {
+          return obj->emit_error(err_symbol, true, ERROR_HANGUP,
+                                 STR_ERROR_HANGUP);
+        }
       }
       obj->do_work(mysql_status);
     }
 
-    void emit(const char *eventName) {
+    void emit(Persistent<String>eventName) {
       HandleScope scope;
-      Local<Value> emit_argv[1] = {
-        String::New(eventName)
-      };
+      Handle<Value> emit_argv[1] = { eventName };
       TryCatch try_catch;
       Emit->Call(handle_, 1, emit_argv);
       if (try_catch.HasCaught())
         FatalException(try_catch);
     }
 
-    void emit_error(const char *eventName, bool doClose = false,
+    void emit_error(Persistent<String>eventName, bool doClose = false,
                    unsigned int errNo = 0, const char *errMsg = NULL) {
       HandleScope scope;
       had_error = true;
@@ -435,12 +440,8 @@ class Client : public ObjectWrap {
           Exception::Error(
             String::New(errMsg ? errMsg : mysql_error(&mysql))
           )->ToObject();
-      err->Set(code_symbol,
-               Integer::NewFromUnsigned(errCode));
-      Local<Value> emit_argv[2] = {
-        String::New(eventName),
-        err
-      };
+      err->Set(code_symbol, Integer::NewFromUnsigned(errCode));
+      Handle<Value> emit_argv[2] = { eventName, err };
       TryCatch try_catch;
       Emit->Call(handle_, 2, emit_argv);
       if (try_catch.HasCaught())
@@ -459,10 +460,7 @@ class Client : public ObjectWrap {
                             ? 0
                             : affected_rows));
       info->Set(num_rows_symbol, Number::New(num_rows));
-      Handle<Value> emit_argv[2] = {
-        done_symbol,
-        info
-      };
+      Handle<Value> emit_argv[2] = { qdone_symbol, info };
       TryCatch try_catch;
       Emit->Call(handle_, 2, emit_argv);
       if (try_catch.HasCaught())
@@ -501,10 +499,7 @@ class Client : public ObjectWrap {
         else
           row->Set(String::New(field->name, field->name_length), field_value);
       }
-      Handle<Value> emit_argv[2] = {
-        result_symbol,
-        row
-      };
+      Handle<Value> emit_argv[2] = { qresult_symbol, row };
       TryCatch try_catch;
       Emit->Call(handle_, 2, emit_argv);
       if (try_catch.HasCaught())
@@ -687,8 +682,13 @@ class Client : public ObjectWrap {
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "threadId", GetThreadID);
 
       emit_symbol = NODE_PSYMBOL("emit");
-      result_symbol = NODE_PSYMBOL("query.result");
-      done_symbol = NODE_PSYMBOL("query.done");
+      connect_symbol = NODE_PSYMBOL("connect");
+      err_symbol = NODE_PSYMBOL("conn.error");
+      reserr_symbol = NODE_PSYMBOL("result.error");
+      qerr_symbol = NODE_PSYMBOL("query.error");
+      qabort_symbol = NODE_PSYMBOL("query.abort");
+      qresult_symbol = NODE_PSYMBOL("query.result");
+      qdone_symbol = NODE_PSYMBOL("query.done");
       close_symbol = NODE_PSYMBOL("close");
       insert_id_symbol = NODE_PSYMBOL("insertId");
       affected_rows_symbol = NODE_PSYMBOL("affectedRows");
