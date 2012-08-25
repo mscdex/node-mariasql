@@ -9,6 +9,21 @@ using namespace v8;
 
 static Persistent<FunctionTemplate> Client_constructor;
 static Persistent<String> emit_symbol;
+static Persistent<String> result_symbol;
+static Persistent<String> done_symbol;
+static Persistent<String> code_symbol;
+static Persistent<String> close_symbol;
+static Persistent<String> insert_id_symbol;
+static Persistent<String> affected_rows_symbol;
+static Persistent<String> num_rows_symbol;
+static Persistent<String> cfg_user_symbol;
+static Persistent<String> cfg_pwd_symbol;
+static Persistent<String> cfg_host_symbol;
+static Persistent<String> cfg_port_symbol;
+static Persistent<String> cfg_db_symbol;
+static Persistent<String> cfg_compress_symbol;
+static Persistent<String> cfg_ssl_symbol;
+static Persistent<Function> Emit;
 
 const int STATE_NULL = -100,
           STATE_CLOSE = -2,
@@ -135,10 +150,9 @@ class Client : public ObjectWrap {
     static void cb_close(uv_handle_t* handle) {
       HandleScope scope;
       Client* obj = (Client*) handle->data;
-      Local<Function> Emit = Local<Function>::Cast(obj->handle_->Get(emit_symbol));
       TryCatch try_catch;
-      Local<Value> emit_argv[2] = {
-        String::New("close"),
+      Handle<Value> emit_argv[2] = {
+        close_symbol,
         Local<Boolean>::New(Boolean::New(obj->had_error))
       };
       Emit->Call(obj->handle_, 2, emit_argv);
@@ -188,7 +202,7 @@ class Client : public ObjectWrap {
             poll_handle = (uv_poll_t*)malloc(sizeof(uv_poll_t));
             uv_poll_init_socket(uv_default_loop(), poll_handle,
                                 mysql_sock);
-            uv_poll_start(poll_handle, UV_READABLE|UV_WRITABLE, cb_poll);
+            uv_poll_start(poll_handle, UV_READABLE, cb_poll);
             poll_handle->data = this;
             if (status) {
               done = true;
@@ -383,7 +397,6 @@ class Client : public ObjectWrap {
 
     void emit(const char* eventName) {
       HandleScope scope;
-      Local<Function> Emit = Local<Function>::Cast(handle_->Get(emit_symbol));
       Local<Value> emit_argv[1] = {
         String::New(eventName)
       };
@@ -397,7 +410,6 @@ class Client : public ObjectWrap {
                    unsigned int errNo = 0, const char* errMsg = NULL) {
       HandleScope scope;
       had_error = true;
-      Local<Function> Emit = Local<Function>::Cast(handle_->Get(emit_symbol));
       unsigned int errCode = mysql_errno(&mysql);
       if (errNo > 0)
         errCode = errNo;
@@ -405,7 +417,7 @@ class Client : public ObjectWrap {
           Exception::Error(
             String::New(errMsg ? errMsg : mysql_error(&mysql))
           )->ToObject();
-      err->Set(String::New("code"),
+      err->Set(code_symbol,
                Integer::NewFromUnsigned(errCode));
       Local<Value> emit_argv[2] = {
         String::New(eventName),
@@ -422,16 +434,15 @@ class Client : public ObjectWrap {
     void emit_done(my_ulonglong insert_id = 0, my_ulonglong affected_rows = 0,
                   my_ulonglong num_rows = 0) {
       HandleScope scope;
-      Local<Function> Emit = Local<Function>::Cast(handle_->Get(emit_symbol));
       Local<Object> info = Object::New();
-      info->Set(String::New("insertId"), Number::New(insert_id));
-      info->Set(String::New("affectedRows"),
+      info->Set(insert_id_symbol, Number::New(insert_id));
+      info->Set(affected_rows_symbol,
                 Number::New(affected_rows == (my_ulonglong) - 1
                             ? 0
                             : affected_rows));
-      info->Set(String::New("numRows"), Number::New(num_rows));
-      Local<Value> emit_argv[2] = {
-        String::New("query.done"),
+      info->Set(num_rows_symbol, Number::New(num_rows));
+      Handle<Value> emit_argv[2] = {
+        done_symbol,
         info
       };
       TryCatch try_catch;
@@ -449,7 +460,6 @@ class Client : public ObjectWrap {
       uint16_t* new_buf;
       unsigned long* lengths = mysql_fetch_lengths(mysql_res);
       Handle<Value> field_value;
-      Local<Function> Emit = Local<Function>::Cast(handle_->Get(emit_symbol));
       Local<Object> row;
       if (query_use_array)
         row = Array::New(n_fields);
@@ -473,8 +483,8 @@ class Client : public ObjectWrap {
         else
           row->Set(String::New(field->name, field->name_length), field_value);
       }
-      Local<Value> emit_argv[2] = {
-        String::New("query.result"),
+      Handle<Value> emit_argv[2] = {
+        result_symbol,
         row
       };
       TryCatch try_catch;
@@ -495,6 +505,9 @@ class Client : public ObjectWrap {
       Client* obj = new Client();
       obj->Wrap(args.This());
       obj->Ref();
+
+      if (Emit.IsEmpty())
+        Emit = Persistent<Function>::New(Local<Function>::Cast(obj->handle_->Get(emit_symbol)));
 
       return args.This();
     }
@@ -532,13 +545,13 @@ class Client : public ObjectWrap {
       obj->init();
 
       Local<Object> cfg = args[0]->ToObject();
-      Local<Value> user_v = cfg->Get(String::New("user"));
-      Local<Value> password_v = cfg->Get(String::New("password"));
-      Local<Value> ip_v = cfg->Get(String::New("host"));
-      Local<Value> port_v = cfg->Get(String::New("port"));
-      Local<Value> db_v = cfg->Get(String::New("db"));
-      Local<Value> compress_v = cfg->Get(String::New("compress"));
-      Local<Value> ssl_v = cfg->Get(String::New("secure"));
+      Local<Value> user_v = cfg->Get(cfg_user_symbol);
+      Local<Value> password_v = cfg->Get(cfg_pwd_symbol);
+      Local<Value> ip_v = cfg->Get(cfg_host_symbol);
+      Local<Value> port_v = cfg->Get(cfg_port_symbol);
+      Local<Value> db_v = cfg->Get(cfg_db_symbol);
+      //Local<Value> compress_v = cfg->Get(cfg_compress_symbol);
+      //Local<Value> ssl_v = cfg->Get(cfg_ssl_symbol);
 
       if (!user_v->IsString() || user_v->ToString()->Length() == 0)
         obj->config.user = NULL;
@@ -653,6 +666,21 @@ class Client : public ObjectWrap {
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "threadId", GetThreadID);
 
       emit_symbol = NODE_PSYMBOL("emit");
+      result_symbol = NODE_PSYMBOL("query.result");
+      done_symbol = NODE_PSYMBOL("query.done");
+      close_symbol = NODE_PSYMBOL("close");
+      insert_id_symbol = NODE_PSYMBOL("insertId");
+      affected_rows_symbol = NODE_PSYMBOL("affectedRows");
+      num_rows_symbol = NODE_PSYMBOL("numRows");
+      code_symbol = NODE_PSYMBOL("code");
+      cfg_user_symbol = NODE_PSYMBOL("user");
+      cfg_pwd_symbol = NODE_PSYMBOL("password");
+      cfg_host_symbol = NODE_PSYMBOL("host");
+      cfg_port_symbol = NODE_PSYMBOL("port");
+      cfg_db_symbol = NODE_PSYMBOL("db");
+      cfg_compress_symbol = NODE_PSYMBOL("compress");
+      cfg_ssl_symbol = NODE_PSYMBOL("secure");
+
       target->Set(name, Client_constructor->GetFunction());
     }
 };
