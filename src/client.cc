@@ -344,6 +344,7 @@ class Client : public ObjectWrap {
                              affected_rows = mysql_affected_rows(&mysql),
                              num_rows = mysql_num_rows(cur_query.result);
                 mysql_free_result(cur_query.result);
+                cur_query.result = NULL;
                 state = STATE_CONNECTED;
                 return emit_done(insert_id, affected_rows, num_rows);
               }
@@ -373,6 +374,7 @@ class Client : public ObjectWrap {
             break;
           case STATE_RESULTFREED:
             state = STATE_CONNECTED;
+            cur_query.result = NULL;
             if (deferred_state == STATE_NULL)
               return emit(qabort_symbol);
             else {
