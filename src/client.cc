@@ -44,10 +44,10 @@ const int STATE_NULL = -100,
           STATE_QUERYABORTED = 13;
 
 struct sql_config {
-  char* user;
-  char* password;
-  char* ip;
-  char* db;
+  char *user;
+  char *password;
+  char *ip;
+  char *db;
   unsigned int port;
   bool compress;
 };
@@ -63,7 +63,7 @@ struct sql_query {
 
 // used with recv peek to check for disconnection during idle,
 // long-running query, etc.
-char* conn_check_buf = (char*) malloc(1);
+char *conn_check_buf = (char*) malloc(1);
 
 #ifdef _WIN32
 # define CHECK_CONNRESET (WSAGetLastError() == WSAECONNRESET   ||  \
@@ -90,7 +90,7 @@ char* conn_check_buf = (char*) malloc(1);
 
 class Client : public ObjectWrap {
   public:
-    uv_poll_t* poll_handle;
+    uv_poll_t *poll_handle;
     uv_os_sock_t mysql_sock;
     MYSQL mysql, *mysql_ret;
     sql_query cur_query;
@@ -163,9 +163,9 @@ class Client : public ObjectWrap {
       }
     }
 
-    static void cb_close(uv_handle_t* handle) {
+    static void cb_close(uv_handle_t *handle) {
       HandleScope scope;
-      Client* obj = (Client*) handle->data;
+      Client *obj = (Client*) handle->data;
       TryCatch try_catch;
       Handle<Value> emit_argv[2] = {
         close_symbol,
@@ -177,9 +177,9 @@ class Client : public ObjectWrap {
       FREE(obj->poll_handle);
     }
 
-    char* escape(const char* str) {
+    char* escape(const char *str) {
       unsigned int str_len = strlen(str);
-      char* dest = (char*) malloc(str_len * 2 + 1);
+      char *dest = (char*) malloc(str_len * 2 + 1);
       mysql_real_escape_string(&mysql, dest, str, str_len);
       return dest;
     }
@@ -192,7 +192,7 @@ class Client : public ObjectWrap {
       }
     }
 
-    void query(const char* qry, bool use_array = false) {
+    void query(const char *qry, bool use_array = false) {
       if (state == STATE_CONNECTED) {
         FREE(cur_query.str);
         cur_query.str = strdup(qry);
@@ -215,7 +215,7 @@ class Client : public ObjectWrap {
                                               config.db,
                                               config.port, NULL, 0);
             mysql_sock = mysql_get_socket(&mysql);
-            poll_handle = (uv_poll_t*)malloc(sizeof(uv_poll_t));
+            poll_handle = (uv_poll_t*) malloc(sizeof(uv_poll_t));
             uv_poll_init_socket(uv_default_loop(), poll_handle,
                                 mysql_sock);
             uv_poll_start(poll_handle, UV_READABLE, cb_poll);
@@ -391,9 +391,9 @@ class Client : public ObjectWrap {
       uv_poll_start(poll_handle, new_events, cb_poll);
     }
 
-    static void cb_poll(uv_poll_t* handle, int status, int events) {
+    static void cb_poll(uv_poll_t *handle, int status, int events) {
       HandleScope scope;
-      Client* obj = (Client*) handle->data;
+      Client *obj = (Client*) handle->data;
       assert(status == 0);
 
       int mysql_status = 0;
@@ -413,7 +413,7 @@ class Client : public ObjectWrap {
       obj->do_work(mysql_status);
     }
 
-    void emit(const char* eventName) {
+    void emit(const char *eventName) {
       HandleScope scope;
       Local<Value> emit_argv[1] = {
         String::New(eventName)
@@ -424,8 +424,8 @@ class Client : public ObjectWrap {
         FatalException(try_catch);
     }
 
-    void emit_error(const char* eventName, bool doClose = false,
-                   unsigned int errNo = 0, const char* errMsg = NULL) {
+    void emit_error(const char *eventName, bool doClose = false,
+                   unsigned int errNo = 0, const char *errMsg = NULL) {
       HandleScope scope;
       had_error = true;
       unsigned int errCode = mysql_errno(&mysql);
@@ -471,12 +471,12 @@ class Client : public ObjectWrap {
 
     void emit_row() {
       HandleScope scope;
-      MYSQL_FIELD* field;
+      MYSQL_FIELD *field;
       unsigned int f = 0, n_fields = mysql_num_fields(cur_query.result),
                    i = 0, vlen;
       unsigned char *buf;
-      uint16_t* new_buf;
-      unsigned long* lengths = mysql_fetch_lengths(cur_query.result);
+      uint16_t *new_buf;
+      unsigned long *lengths = mysql_fetch_lengths(cur_query.result);
       Handle<Value> field_value;
       Local<Object> row;
       if (cur_query.use_array)
@@ -520,7 +520,7 @@ class Client : public ObjectWrap {
         );
       }
 
-      Client* obj = new Client();
+      Client *obj = new Client();
       obj->Wrap(args.This());
       obj->Ref();
 
@@ -535,7 +535,7 @@ class Client : public ObjectWrap {
 
     static Handle<Value> Escape(const Arguments& args) {
       HandleScope scope;
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
 
       if (obj->state < STATE_CONNECTED) {
         return ThrowException(Exception::Error(
@@ -547,7 +547,7 @@ class Client : public ObjectWrap {
         );
       }
       String::Utf8Value arg_s(args[0]);
-      char* newstr = obj->escape(*arg_s);
+      char *newstr = obj->escape(*arg_s);
       Local<String> escaped_s = String::New(newstr);
       free(newstr);
       return scope.Close(escaped_s);
@@ -555,7 +555,7 @@ class Client : public ObjectWrap {
 
     static Handle<Value> Connect(const Arguments& args) {
       HandleScope scope;
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
 
       if (obj->state != STATE_CLOSED) {
         return ThrowException(Exception::Error(
@@ -609,14 +609,14 @@ class Client : public ObjectWrap {
 
     static Handle<Value> AbortQuery(const Arguments& args) {
       HandleScope scope;
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
       obj->abort_query();
       return Undefined();
     }
 
     static Handle<Value> GetThreadID(const Arguments& args) {
       HandleScope scope;
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
       if (obj->state < STATE_CONNECTED) {
         return ThrowException(Exception::Error(
           String::New("Not connected"))
@@ -627,7 +627,7 @@ class Client : public ObjectWrap {
 
     static Handle<Value> Query(const Arguments& args) {
       HandleScope scope;
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
       if (obj->state != STATE_CONNECTED) {
         return ThrowException(Exception::Error(
           String::New("Not ready to query"))
@@ -647,7 +647,7 @@ class Client : public ObjectWrap {
 
     static Handle<Value> Close(const Arguments& args) {
       HandleScope scope;
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
       if (obj->state == STATE_CLOSED) {
         return ThrowException(Exception::Error(
           String::New("Already closed"))
@@ -659,7 +659,7 @@ class Client : public ObjectWrap {
 
     static Handle<Value> IsMariaDB(const Arguments& args) {
       HandleScope scope;
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
       if (obj->state < STATE_CONNECTED) {
         return ThrowException(Exception::Error(
           String::New("Not connected"))
