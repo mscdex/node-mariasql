@@ -40,13 +40,15 @@ var Client = require('mariasql');
 
 var c = new Client();
 
-c.on('error', function(err) {
-  console.log('Client error: ' + err);
-});
-
-c.on('close', function(had_err) {
-  console.log('Closed');
-});
+c.on('connect', function() {
+   console.log('Client connected');
+ })
+ .on('error', function(err) {
+   console.log('Client error: ' + err);
+ })
+ .on('close', function(had_err) {
+   console.log('Client closed');
+ });
 
 c.query("SHOW DATABASES")
  .on('result', function(result) {
@@ -55,7 +57,7 @@ c.query("SHOW DATABASES")
  .on('error', function(err) {
    console.log('Query error: ' + inspect(err));
  })
- .on('end', function() {
+ .on('end', function(info) {
    console.log('Query finished successfully');
    c.end();
  });
@@ -71,7 +73,7 @@ c.connect({
 API
 ===
 
-require('mariasql') returns a **_Client_** object
+`require('mariasql')` returns a **_Client_** object
 
 Client properties
 -----------------
@@ -84,7 +86,7 @@ Client properties
 Client events
 -------------
 
-* **connect**() - A connection to the server was successful.
+* **connect**() - Connection and authentication with the server was successful.
 
 * **error**(<_Error_>err) - An error occurred at the connection level.
 
@@ -122,19 +124,19 @@ Client methods
 Query events
 ------------
 
-* **result**(<_mixed_>res) - `res` is either an object of fieldName=>fieldValue pairs or array of field values, where each field value is a string (except MySQL NULLs are JavaScript nulls).
+* **result**(<_mixed_>res) - `res` is either an object of fieldName=>fieldValue pairs **or** just an array of the field values (in either case, JavaScript nulls are used for MySQL NULLs), depending on how query() was called.
 
 * **abort**() - The query was aborted (the 'end' event will not be emitted) by way of query.abort().
 
 * **error**(<_Error_>err) - An error occurred while executing this query (the 'end' event will not be emitted).
 
-* **end**(<_object_>info) - The query finished successfully. `info` contains statistics such as 'affectedRows', 'insertId', and 'numRows.'
+* **end**(<_object_>info) - The query finished _successfully_. `info` contains statistics such as 'affectedRows', 'insertId', and 'numRows.'
 
 
 Query methods
 -------------
 
-* **abort**() - _(void)_ - Aborts query immediately if the query is either currently queued or is (about to start) returning rows (if applicable). If the query is still being processed on the server side, the query will not be aborted until the server finishes processing it (i.e. when rows are about to be returned for SELECT queries). In any case, you can always kill the currently running query early by executing "KILL QUERY <the client's threadId>" from a separate connection.
+* **abort**() - _(void)_ - Aborts query immediately if the query is either currently queued or is (about to start) returning rows (if applicable). If the query is still being processed on the server side, the query will not be aborted until the server finishes processing it (i.e. when rows are about to be returned for SELECT queries). In any case, you can always kill the currently running query early by executing "KILL QUERY _client_threadId_" from a separate connection.
 
 
 TODO
