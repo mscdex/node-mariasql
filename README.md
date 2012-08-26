@@ -108,7 +108,23 @@ Client methods
 
     * **port** - <_integer_> - Port number of the MySQL/MariaDB server. **Default:** 3306
 
-    * **db** - <_string_> - A database to automatically select after authentication **Default:** (no db)
+    * **db** - <_string_> - A database to automatically select after authentication. **Default:** (no db)
+
+    * **compress** - <_boolean_> - Use connection compression? **Default:** false
+
+    * **ssl** - <_mixed_> - If boolean true, defaults listed below and default ciphers will be used, otherwise it must be an object with any of the following valid properties: **Default:** false
+
+        * **key** - <_string_> - Path to a client private key file in PEM format (if the key requires a passphrase and libmysqlclient was built with yaSSL (bundled Windows libraries are), an error will occur). **Default:** (none)
+
+        * **cert** - <_string_> - Path to a client certificate key file in PEM format. **Default:** (none)
+
+        * **ca** - <_string_> - Path to a file in PEM format that contains a list of trusted certificate authorities. **Default:** (none)
+
+        * **capath** - <_string_> - Path to a directory containing certificate authority certificate files in PEM format. **Default:** (none)
+
+        * **cipher** - <_string_> - A colon-delimited list of ciphers to use when connecting. **Default:** "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH" (if cipher is set to anything other than false or non-empty string)
+
+        * **rejectUnauthorized** - <_boolean_> - If true, the connection will be rejected if the Common Name value does not match that of the host name. **Default:** false
 
 * **query**(<_string_>query[, <_boolean_>useArray=false]) - <_Query_> - Enqueues the given `query` and returns a _Query_ instance. If `useArray` is set to true, then an array of field values are returned instead of an object of fieldName=>fieldValue pairs.
 
@@ -143,10 +159,6 @@ TODO
 ====
 
 * Multiple statement (e.g. "SELECT * FROM foo; SELECT * FROM bar" vs. "SELECT * FROM foo") support
-
-* Compression
-
-* SSL encrypted connections
 
 * Auto-reconnect algorithm(s) ?
 
