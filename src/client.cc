@@ -426,8 +426,6 @@ class Client : public ObjectWrap {
         mysql_status |= MYSQL_WAIT_READ;
       if (events & UV_WRITABLE)
         mysql_status |= MYSQL_WAIT_WRITE;
-      /*if (events & UV_TIMEOUT)
-        mysql_status |= MYSQL_WAIT_TIMEOUT;*/
       if (obj->mysql_sock) {
         // check for connection error
         int r = recv(obj->mysql_sock, conn_check_buf, 1, MSG_PEEK);
@@ -621,7 +619,7 @@ class Client : public ObjectWrap {
       Local<Value> port_v = cfg->Get(cfg_port_symbol);
       Local<Value> db_v = cfg->Get(cfg_db_symbol);
       //Local<Value> compress_v = cfg->Get(cfg_compress_symbol);
-      //Local<Value> ssl_v = cfg->Get(cfg_ssl_symbol);
+      Local<Value> ssl_v = cfg->Get(cfg_ssl_symbol);
 
       if (!user_v->IsString() || user_v->ToString()->Length() == 0)
         obj->config.user = NULL;
@@ -629,18 +627,21 @@ class Client : public ObjectWrap {
         String::Utf8Value user_s(user_v);
         obj->config.user = strdup(*user_s);
       }
+
       if (!password_v->IsString() || password_v->ToString()->Length() == 0)
         obj->config.password = NULL;
       else {
         String::Utf8Value password_s(password_v);
         obj->config.password = strdup(*password_s);
       }
+
       if (!ip_v->IsString() || ip_v->ToString()->Length() == 0)
         obj->config.ip = NULL;
       else {
         String::Utf8Value ip_s(ip_v);
         obj->config.ip = strdup(*ip_s);
       }
+
       if (!port_v->IsUint32() || port_v->Uint32Value() == 0)
         obj->config.port = 3306;
       else
@@ -649,6 +650,11 @@ class Client : public ObjectWrap {
       if (db_v->IsString() && db_v->ToString()->Length() > 0) {
         String::Utf8Value db_s(db_v);
         obj->config.db = strdup(*db_s);
+      }
+
+      if (ssl_v->IsBoolean() && ssl_v->BooleanValue()) {
+        mysql_ssl_set(&obj->mysql, NULL, NULL, NULL, NULL,
+         "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH");
       }
 
       obj->connect();
