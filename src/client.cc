@@ -196,11 +196,9 @@ class Client : public ObjectWrap {
       FREE(obj->poll_handle);
     }
 
-    char* escape(const char *str) {
-      unsigned int str_len = strlen(str);
-      char *dest = (char*) malloc(str_len * 2 + 1);
-      mysql_real_escape_string(&mysql, dest, str, str_len);
-      return dest;
+    unsigned long escape(const char *source, unsigned long source_len,
+                         char* dest) {
+      return mysql_real_escape_string(&mysql, dest, source, source_len);
     }
 
     void abort_query() {
@@ -593,10 +591,12 @@ class Client : public ObjectWrap {
           String::New("You must supply a string"))
         );
       }
-      String::Utf8Value arg_s(args[0]);
-      char *newstr = obj->escape(*arg_s);
-      Local<String> escaped_s = String::New(newstr);
-      free(newstr);
+      String::Value arg_v(args[0]);
+      unsigned long arg_len = arg_v.length();
+      char *result = (char*) malloc(arg_len * 2 + 1);
+      unsigned long result_len = obj->escape((char*)*arg_v, arg_len, result);
+      Local<String> escaped_s = String::New(result, result_len);
+      free(result);
       return scope.Close(escaped_s);
     }
 
