@@ -618,7 +618,7 @@ class Client : public ObjectWrap {
       Local<Value> ip_v = cfg->Get(cfg_host_symbol);
       Local<Value> port_v = cfg->Get(cfg_port_symbol);
       Local<Value> db_v = cfg->Get(cfg_db_symbol);
-      //Local<Value> compress_v = cfg->Get(cfg_compress_symbol);
+      Local<Value> compress_v = cfg->Get(cfg_compress_symbol);
       Local<Value> ssl_v = cfg->Get(cfg_ssl_symbol);
 
       if (!user_v->IsString() || user_v->ToString()->Length() == 0)
@@ -651,6 +651,9 @@ class Client : public ObjectWrap {
         String::Utf8Value db_s(db_v);
         obj->config.db = strdup(*db_s);
       }
+
+      if (compress_v->IsBoolean() && compress_v->BooleanValue())
+        mysql_options(&obj->mysql, MYSQL_OPT_COMPRESS, 0);
 
       if (ssl_v->IsBoolean() && ssl_v->BooleanValue()) {
         mysql_ssl_set(&obj->mysql, NULL, NULL, NULL, NULL,
