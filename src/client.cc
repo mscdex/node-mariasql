@@ -29,6 +29,12 @@ static Persistent<String> cfg_port_symbol;
 static Persistent<String> cfg_db_symbol;
 static Persistent<String> cfg_compress_symbol;
 static Persistent<String> cfg_ssl_symbol;
+static Persistent<String> cfg_ssl_key_symbol;
+static Persistent<String> cfg_ssl_cert_symbol;
+static Persistent<String> cfg_ssl_ca_symbol;
+static Persistent<String> cfg_ssl_capath_symbol;
+static Persistent<String> cfg_ssl_cipher_symbol;
+static Persistent<String> cfg_ssl_reject_symbol;
 
 const int STATE_NULL = -100,
           STATE_CLOSE = -2,
@@ -54,7 +60,13 @@ struct sql_config {
   char *ip;
   char *db;
   unsigned int port;
-  bool compress;
+
+  // ssl
+  char *ssl_key;
+  char *ssl_cert;
+  char *ssl_ca;
+  char *ssl_capath;
+  char *ssl_cipher;
 };
 
 struct sql_query {
@@ -72,6 +84,9 @@ struct sql_query {
 // long-running query, etc.
 char *conn_check_buf = (char*) malloc(1);
 
+const my_bool MY_BOOL_TRUE = 1,
+              MY_BOOL_FALSE = 0;
+
 #ifdef _WIN32
 # define CHECK_CONNRESET (WSAGetLastError() == WSAECONNRESET   ||  \
                           WSAGetLastError() == WSAENOTCONN     ||  \
@@ -82,6 +97,8 @@ char *conn_check_buf = (char*) malloc(1);
 # include <errno.h>
 # define CHECK_CONNRESET (errno == ECONNRESET || errno == ENOTCONN)
 #endif
+
+#define DEFAULT_CIPHER "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH"
 
 #define ERROR_HANGUP 10001
 #define STR_ERROR_HANGUP "Disconnected from the server"
@@ -128,6 +145,11 @@ class Client : public ObjectWrap {
       config.password = NULL;
       config.ip = NULL;
       config.db = NULL;
+      config.ssl_key = NULL;
+      config.ssl_cert = NULL;
+      config.ssl_ca = NULL;
+      config.ssl_capath = NULL;
+      config.ssl_cipher = NULL;
       had_error = destructing = false;
       deferred_state = STATE_NULL;
       poll_handle = NULL;
@@ -156,6 +178,11 @@ class Client : public ObjectWrap {
       FREE(config.password);
       FREE(config.ip);
       FREE(config.db);
+      FREE(config.ssl_key);
+      FREE(config.ssl_cert);
+      FREE(config.ssl_ca);
+      FREE(config.ssl_capath);
+      FREE(config.ssl_cipher);
 
       FREE(cur_query.result);
       //FREE_PERSIST(cur_query.row_template);
@@ -608,6 +635,10 @@ class Client : public ObjectWrap {
         return ThrowException(Exception::Error(
           String::New("Not ready to connect"))
         );
+      } else if (!args[0]->IsObject()) {
+        return ThrowException(Exception::Error(
+          String::New("Missing configuration object"))
+        );
       }
 
       obj->init();
@@ -655,9 +686,46 @@ class Client : public ObjectWrap {
       if (compress_v->IsBoolean() && compress_v->BooleanValue())
         mysql_options(&obj->mysql, MYSQL_OPT_COMPRESS, 0);
 
-      if (ssl_v->IsBoolean() && ssl_v->BooleanValue()) {
-        mysql_ssl_set(&obj->mysql, NULL, NULL, NULL, NULL,
-         "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH");
+      if (ssl_v->IsObject() || ssl_v->IsBoolean()) {
+        if (ssl_v->IsBoolean() && ssl_v->BooleanValue())
+          obj->config.ssl_cipher = DEFAULT_CIPHER;
+        if (ssl_v->IsObject()) {
+          Local<Object> ssl_opts = ssl_v->ToObject();
+          Local<Value> key = ssl_opts->Get(cfg_ssl_key_symbol);
+          Local<Value> cert = ssl_opts->Get(cfg_ssl_cert_symbol);
+          Local<Value> ca = ssl_opts->Get(cfg_ssl_ca_symbol);
+          Local<Value> capath = ssl_opts->Get(cfg_ssl_capath_symbol);
+          Local<Value> cipher = ssl_opts->Get(cfg_ssl_cipher_symbol);
+          Local<Value> reject = ssl_opts->Get(cfg_ssl_reject_symbol);
+
+          if (key->IsString() && key->ToString()->Length() > 0)
+            obj->config.ssl_key = strdup(*(String::Utf8Value(key)));
+          if (cert->IsString() && cert->ToString()->Length() > 0)
+            obj->config.ssl_cert = strdup(*(String::Utf8Value(cert)));
+          if (ca->IsString() && ca->ToString()->Length() > 0)
+            obj->config.ssl_ca = strdup(*(String::Utf8Value(ca)));
+          if (capath->IsString() && capath->ToString()->Length() > 0)
+            obj->config.ssl_capath = strdup(*(String::Utf8Value(capath)));
+          if (cipher->IsString() && cipher->ToString()->Length() > 0)
+            obj->config.ssl_cipher = strdup(*(String::Utf8Value(cipher)));
+          else if (!(cipher->IsBoolean() && !cipher->BooleanValue()))
+            obj->config.ssl_cipher = DEFAULT_CIPHER;
+
+          mysql_options(&obj->mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT,
+                        (reject->IsBoolean() && reject->BooleanValue()
+                         ? &MY_BOOL_TRUE
+                         : &MY_BOOL_FALSE));
+        } else {
+          mysql_options(&obj->mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT,
+                        &MY_BOOL_FALSE);
+        }
+
+        mysql_ssl_set(&obj->mysql,
+                      obj->config.ssl_key,
+                      obj->config.ssl_cert,
+                      obj->config.ssl_ca,
+                      obj->config.ssl_capath,
+                      obj->config.ssl_cipher);
       }
 
       obj->connect();
@@ -763,7 +831,13 @@ class Client : public ObjectWrap {
       cfg_port_symbol = NODE_PSYMBOL("port");
       cfg_db_symbol = NODE_PSYMBOL("db");
       cfg_compress_symbol = NODE_PSYMBOL("compress");
-      cfg_ssl_symbol = NODE_PSYMBOL("secure");
+      cfg_ssl_symbol = NODE_PSYMBOL("ssl");
+      cfg_ssl_key_symbol = NODE_PSYMBOL("key");
+      cfg_ssl_cert_symbol = NODE_PSYMBOL("cert");
+      cfg_ssl_ca_symbol = NODE_PSYMBOL("ca");
+      cfg_ssl_capath_symbol = NODE_PSYMBOL("capath");
+      cfg_ssl_cipher_symbol = NODE_PSYMBOL("cipher");
+      cfg_ssl_reject_symbol = NODE_PSYMBOL("rejectUnauthorized");
 
       target->Set(name, Client_constructor->GetFunction());
     }
