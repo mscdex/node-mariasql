@@ -335,7 +335,9 @@ class Client : public ObjectWrap {
                 state = STATE_QUERYING;
                 done = true;
               } else {
-                emit(resquery_symbol);
+                if (!cur_query.err
+                    || (cur_query.err && mysql_errno(&mysql) != 2013))
+                  emit(resquery_symbol);
                 FREE(cur_query.str);
                 if (cur_query.err) {
                   state = STATE_NEXTQUERY;
@@ -351,7 +353,9 @@ class Client : public ObjectWrap {
             if (status)
               done = true;
             else {
-              emit(resquery_symbol);
+              if (!cur_query.err
+                  || (cur_query.err && mysql_errno(&mysql) != 2013))
+                emit(resquery_symbol);
               FREE(cur_query.str);
               if (cur_query.err) {
                 state = STATE_NEXTQUERY;
@@ -438,7 +442,9 @@ class Client : public ObjectWrap {
                 state = STATE_NEXTQUERYING;
                 done = true;
               } else {
-                if (!cur_query.abort)
+                if (!cur_query.abort
+                    && (!cur_query.err
+                        || (cur_query.err && mysql_errno(&mysql) != 2013)))
                   emit(resquery_symbol);
                 if (cur_query.err) {
                   state = STATE_RESULTFREE;
@@ -454,7 +460,9 @@ class Client : public ObjectWrap {
             if (status)
               done = true;
             else {
-              if (!cur_query.abort)
+                if (!cur_query.abort
+                    && (!cur_query.err
+                        || (cur_query.err && mysql_errno(&mysql) != 2013)))
                 emit(resquery_symbol);
               if (cur_query.err) {
                 state = STATE_RESULTFREE;
