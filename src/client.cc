@@ -829,17 +829,6 @@ class Client : public ObjectWrap {
       return Undefined();
     }
 
-    static Handle<Value> GetThreadID(const Arguments& args) {
-      HandleScope scope;
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
-      if (obj->state < STATE_CONNECTED) {
-        return ThrowException(Exception::Error(
-          String::New("Not connected"))
-        );
-      }
-      return scope.Close(Number::New(mysql_thread_id(&obj->mysql)));
-    }
-
     static Handle<Value> Query(const Arguments& args) {
       HandleScope scope;
       Client *obj = ObjectWrap::Unwrap<Client>(args.This());
@@ -899,7 +888,6 @@ class Client : public ObjectWrap {
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "escape", Escape);
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "end", Close);
       NODE_SET_PROTOTYPE_METHOD(Client_constructor, "isMariaDB", IsMariaDB);
-      NODE_SET_PROTOTYPE_METHOD(Client_constructor, "threadId", GetThreadID);
 
       emit_symbol = NODE_PSYMBOL("emit");
       connect_symbol = NODE_PSYMBOL("connect");
