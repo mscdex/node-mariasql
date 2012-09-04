@@ -39,6 +39,11 @@ var inspect = require('util').inspect;
 var Client = require('mariasql');
 
 var c = new Client();
+c.connect({
+  host: '127.0.0.1',
+  user: 'foo',
+  password: 'bar'
+});
 
 c.on('connect', function() {
    console.log('Client connected');
@@ -46,27 +51,86 @@ c.on('connect', function() {
  .on('error', function(err) {
    console.log('Client error: ' + err);
  })
- .on('close', function(had_err) {
+ .on('close', function(hadError) {
    console.log('Client closed');
  });
 
-c.query("SHOW DATABASES")
- .on('result', function(result) {
-   console.log('Query result: ' + inspect(result));
+c.query('SHOW DATABASES')
+ .on('result', function(res) {
+   res.on('row', function(row) {
+     console.log('Query row: ' + inspect(row));
+   })
+   .on('error', function(err) {
+     console.log('Query error: ' + inspect(err));
+   })
+   .on('end', function(info) {
+     console.log('Query finished successfully');
+   });
  })
- .on('error', function(err) {
-   console.log('Query error: ' + inspect(err));
- })
- .on('end', function(info) {
-   console.log('Query finished successfully');
-   c.end();
+ .on('end', function() {
+  console.log('Done with all queries');
  });
 
+c.end();
+```
+
+* Abort the second query when doing multiple statements
+
+```javascript
+var inspect = require('util').inspect;
+var Client = require('mariasql');
+
+var c = new Client(), qcnt = 0;
 c.connect({
   host: '127.0.0.1',
   user: 'foo',
-  password: 'bar'
+  password: 'bar',
+  multiStatements: true
 });
+
+c.on('connect', function() {
+   console.log('Client connected');
+ })
+ .on('error', function(err) {
+   console.log('Client error: ' + err);
+ })
+ .on('close', function(hadError) {
+   console.log('Client closed');
+ });
+
+c.query('SELECT "first query"; SELECT "second query"; SELECT "third query"', true)
+ .on('result', function(res) {
+   if (++qcnt === 2)
+     res.abort();
+   res.on('row', function(row) {
+     console.log('Query #' + (qcnt) + ' row: ' + inspect(row));
+   })
+   .on('error', function(err) {
+     console.log('Query #' + (qcnt) + ' error: ' + inspect(err));
+   })
+   .on('abort', function() {
+     console.log('Query #' + (qcnt) + ' was aborted');
+   })
+   .on('end', function(info) {
+     console.log('Query #' + (qcnt) + ' finished successfully');
+   });
+ })
+ .on('end', function() {
+  console.log('Done with all queries');
+ });
+
+c.end();
+
+/* output:
+    Client connected
+    Query #1 row: [ 'first query' ]
+    Query #1 finished successfully
+    Query #2 was aborted
+    Query #3 row: [ 'third query' ]
+    Query #3 finished successfully
+    Done with all queries
+    Client closed
+ */
 ```
 
 
@@ -80,7 +144,7 @@ Client properties
 
 * **connected** - <_boolean_> - Set to true if the Client is currently connected.
 
-* **threadId** - <_integer_> - If connected, this is the thread id of this connection on the server.
+* **threadId** - <_string_> - If connected, this is the thread id of this connection on the server.
 
 
 Client events
@@ -108,6 +172,8 @@ Client methods
 
     * **port** - <_integer_> - Port number of the MySQL/MariaDB server. **Default:** 3306
 
+    * **multiStatements** - <_boolean_> - Allow multiple statements to be executed in a single "query" (e.g. `connection.query('SELECT 1; SELECT 2; SELECT 3')`) on this connection. **Default:** false
+
     * **db** - <_string_> - A database to automatically select after authentication. **Default:** (no db)
 
     * **compress** - <_boolean_> - Use connection compression? **Default:** false
@@ -126,7 +192,7 @@ Client methods
 
         * **rejectUnauthorized** - <_boolean_> - If true, the connection will be rejected if the Common Name value does not match that of the host name. **Default:** false
 
-* **query**(<_string_>query[, <_boolean_>useArray=false]) - <_Query_> - Enqueues the given `query` and returns a _Query_ instance. If `useArray` is set to true, then an array of field values are returned instead of an object of fieldName=>fieldValue pairs.
+* **query**(<_string_>query[, <_boolean_>useArray=false]) - <_Results_> - Enqueues the given `query` and returns a _Results_ object. If `useArray` is set to true, then an array of field values are returned instead of an object of fieldName=>fieldValue pairs. (Note: using arrays performs much faster)
 
 * **escape**(<_string_>value) - <_string_> - Escapes `value` for use in queries. **_This method requires a live connection_**.
 
@@ -137,10 +203,28 @@ Client methods
 * **isMariaDB**() - <_boolean_> - Returns true if the remote server is MariaDB.
 
 
+Results events
+--------------
+
+* **result**(<_Query_>res) - `res` represents the result of a single query.
+
+* **abort**() - The results were aborted (the 'end' event will not be emitted) by way of results.abort().
+
+* **error**(<_Error_>err) - An error occurred while processing this set of results (the 'end' event will not be emitted).
+
+* **end**() - All queries in this result set finished _successfully_.
+
+
+Results methods
+---------------
+
+* **abort**() - _(void)_ - Aborts any remaining queries (if multiple statements are used) immediately if the queries are either currently queued or are (about to start) returning rows (if applicable). This is a passive abort, so if the current query is still being processed on the server side, the queries will not be aborted until the server finishes processing the current query (i.e. when rows are about to be returned for SELECT queries). In any case, you can always kill the currently running query early by executing "KILL QUERY _client_threadId_" from a separate connection (note: this query can be dangerous if modifying information without transactions).
+
+
 Query events
 ------------
 
-* **result**(<_mixed_>res) - `res` is either an object of fieldName=>fieldValue pairs **or** just an array of the field values (in either case, JavaScript nulls are used for MySQL NULLs), depending on how query() was called.
+* **row**(<_mixed_>row) - `row` is either an object of fieldName=>fieldValue pairs **or** just an array of the field values (in either case, JavaScript nulls are used for MySQL NULLs), depending on how query() was called.
 
 * **abort**() - The query was aborted (the 'end' event will not be emitted) by way of query.abort().
 
@@ -152,16 +236,20 @@ Query events
 Query methods
 -------------
 
-* **abort**() - _(void)_ - Aborts query immediately if the query is either currently queued or is (about to start) returning rows (if applicable). If the query is still being processed on the server side, the query will not be aborted until the server finishes processing it (i.e. when rows are about to be returned for SELECT queries). In any case, you can always kill the currently running query early by executing "KILL QUERY _client_threadId_" from a separate connection.
+* **abort**() - _(void)_ - Aborts query immediately if the query is either currently queued or is (about to start) returning rows (if applicable). If the query is still being processed on the server side, the query will not be aborted until the server finishes processing it (i.e. when rows are about to be returned for SELECT queries). In any case, you can always kill the currently running query early by executing "KILL QUERY _client_threadId_" from a separate connection (note: this query is dangerous if modifying information without transactions).
 
 
 TODO
 ====
 
-* Multiple statement (e.g. "SELECT * FROM foo; SELECT * FROM bar" vs. "SELECT * FROM foo") support
-
 * Auto-reconnect algorithm(s) ?
 
 * Method to change character set
+
+* More connection options (connection timeout, query timeout, disable MySQL 4.1-style password auth)
+
+* Periodic ping to keep connection alive
+
+* API to execute "KILL QUERY _client_threadId_" easily
 
 * Possibly some other stuff I'm not aware of at the moment
