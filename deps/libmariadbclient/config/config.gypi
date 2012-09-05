@@ -38,5 +38,20 @@
         }],
       ],
     }],
+    [ 'OS=="freebsd"', {
+      'libraries': [
+        '-L/usr/local/lib -lexecinfo',
+      ],
+      'include_dirs': [
+        '/usr/local/include',
+      ],
+      'conditions': [
+        ['target_arch=="ia32"', {
+          'include_dirs': [ 'freebsd-x86' ],
+        }, {
+          'include_dirs': [ 'freebsd-x64' ],
+        }],
+      ],
+    }],
   ],
 }
