@@ -1,0 +1,38 @@
+{
+  'targets': [
+    {
+      'target_name': 'taocrypt',
+      'type': 'static_library',
+      'includes': [ '../../../config/config.gypi' ],
+      'sources': [
+        'src/aes.cpp',
+        'src/aestables.cpp',
+        'src/algebra.cpp',
+        'src/arc4.cpp',
+        'src/asn.cpp',
+        'src/coding.cpp',
+        'src/des.cpp',
+        'src/dh.cpp',
+        'src/dsa.cpp',
+        'src/file.cpp',
+        'src/hash.cpp',
+        'src/integer.cpp',
+        'src/md2.cpp',
+        'src/md4.cpp',
+        'src/md5.cpp',
+        'src/misc.cpp',
+        'src/random.cpp',
+        'src/ripemd.cpp',
+        'src/rsa.cpp',
+        'src/sha.cpp',
+        'src/rabbit.cpp',
+        'src/hc128.cpp',
+      ],
+      'include_dirs': [
+        '.',
+        'include',
+        'mySTL',
+      ],
+    },
+  ],
+}

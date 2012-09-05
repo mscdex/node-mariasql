@@ -11,16 +11,13 @@ uses the non-blocking functions available in MariaDB's client library.
 Therefore, this binding does **_not_** use multiple threads to achieve non-blocking
 behavior.
 
-This binding is currently tested on Windows and Linux.
+This binding has been tested on Windows, Linux, and Mac (OSX 10.6).
 
 
 Requirements
 ============
 
 * [node.js](http://nodejs.org/) -- v0.8.0 or newer
-
-* \*nix users need to install the libmariadbclient-dev package (must be 5.5.21+).
-  Linux users can get this from [the MariaDB repositories](http://downloads.mariadb.org/MariaDB/repositories/).
 
 
 Install
