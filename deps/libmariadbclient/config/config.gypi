@@ -29,5 +29,8 @@
         '/usr/local/include',
       ],
     }],
+    [ 'OS=="solaris"', {
+      'include_dirs': [ 'solaris' ],
+    }],
   ],
 }
