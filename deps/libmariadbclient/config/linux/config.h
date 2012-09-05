@@ -18,14 +18,14 @@
 #define DOT_FRM_VERSION 6
 /* Headers we may want to use. */
 #define STDC_HEADERS 1
-/* #undef _GNU_SOURCE */
-/* #undef HAVE_ALLOCA_H */
+#define _GNU_SOURCE 1
+#define HAVE_ALLOCA_H 1
 #define HAVE_AIO_H 1
 #define HAVE_ARPA_INET_H 1
-/* #undef HAVE_ASM_MSR_H */
-/* #undef HAVE_ASM_TERMBITS_H */
+#define HAVE_ASM_MSR_H 1
+#define HAVE_ASM_TERMBITS_H 1
 #define HAVE_BSEARCH 1
-/* #undef HAVE_CRYPT_H */
+#define HAVE_CRYPT_H 1
 #define HAVE_CURSES_H 1
 #define HAVE_CXXABI_H 1
 /* #undef HAVE_BFD_H */
@@ -37,17 +37,17 @@
 #define HAVE_FCNTL_H 1
 #define HAVE_FENV_H 1
 #define HAVE_FLOAT_H 1
-#define HAVE_FLOATINGPOINT_H 1
+/* #undef HAVE_FLOATINGPOINT_H */
 #define HAVE_FNMATCH_H 1
-/* #undef HAVE_FPU_CONTROL_H */
+#define HAVE_FPU_CONTROL_H 1
 #define HAVE_GRP_H 1
 #define HAVE_EXPLICIT_TEMPLATE_INSTANTIATION 1
 /* #undef HAVE_IA64INTRIN_H */
-#define HAVE_IEEEFP_H 1
+/* #undef HAVE_IEEEFP_H */
 #define HAVE_INTTYPES_H 1
 #define HAVE_LIMITS_H 1
 #define HAVE_LOCALE_H 1
-/* #undef HAVE_MALLOC_H */
+#define HAVE_MALLOC_H 1
 #define HAVE_MEMORY_H 1
 #define HAVE_NETINET_IN_H 1
 #define HAVE_PATHS_H 1
@@ -72,17 +72,17 @@
 /* #undef HAVE_SYS_FPU_H */
 #define HAVE_SYS_IOCTL_H 1
 #define HAVE_SYS_IPC_H 1
-#define HAVE_SYS_MALLOC_H 1
+/* #undef HAVE_SYS_MALLOC_H */
 #define HAVE_SYS_MMAN_H 1
 /* #undef HAVE_SYS_NDIR_H */
 /* #undef HAVE_SYS_PTE_H */
 /* #undef HAVE_SYS_PTEM_H */
-/* #undef HAVE_SYS_PRCTL_H */
+#define HAVE_SYS_PRCTL_H 1
 #define HAVE_SYS_RESOURCE_H 1
 #define HAVE_SYS_SELECT_H 1
 #define HAVE_SYS_SHM_H 1
 #define HAVE_SYS_SOCKET_H 1
-#define HAVE_SYS_SOCKIO_H 1
+/* #undef HAVE_SYS_SOCKIO_H */
 #define HAVE_SYS_STAT_H 1
 /* #undef HAVE_SYS_STREAM_H */
 /* #undef HAVE_SYS_TERMCAP_H */
@@ -95,13 +95,13 @@
 #define HAVE_TERM_H 1
 /* #undef HAVE_TERMBITS_H */
 #define HAVE_TERMIOS_H 1
-/* #undef HAVE_TERMIO_H */
+#define HAVE_TERMIO_H 1
 #define HAVE_TERMCAP_H 1
 #define HAVE_TIME_H 1
 #define HAVE_UNISTD_H 1
 #define HAVE_UTIME_H 1
 /* #undef HAVE_VARARGS_H */
-#define HAVE_VIS_H 1
+/* #undef HAVE_VIS_H */
 /* #undef HAVE_SYS_UTIME_H */
 #define HAVE_SYS_WAIT_H 1
 #define HAVE_SYS_PARAM_H 1
@@ -109,8 +109,8 @@
 /* Libraries */
 /* #undef HAVE_LIBPTHREAD */
 #define HAVE_LIBM 1
-/* #undef HAVE_LIBDL */
-/* #undef HAVE_LIBRT */
+#define HAVE_LIBDL 1
+#define HAVE_LIBRT 1
 /* #undef HAVE_LIBSOCKET */
 /* #undef HAVE_LIBNSL */
 #define HAVE_LIBCRYPT 1
@@ -126,8 +126,8 @@
 
 #define FIONREAD_IN_SYS_IOCTL 1
 #define GWINSZ_IN_SYS_IOCTL 1
-#define TIOCSTAT_IN_SYS_IOCTL 1
-#define FIONREAD_IN_SYS_FILIO 1
+/* #undef TIOCSTAT_IN_SYS_IOCTL */
+/* #undef FIONREAD_IN_SYS_FILIO */
 
 /* Functions we may want to use. */
 /* #undef HAVE_AIOWAIT */
@@ -140,7 +140,7 @@
 #define HAVE_CHOWN 1
 #define HAVE_CLOCK_GETTIME 1
 #define HAVE_CRYPT 1
-/* #undef HAVE_CUSERID */
+#define HAVE_CUSERID 1
 #define HAVE_CXX_NEW 1
 /* #undef HAVE_DIRECTIO */
 #define HAVE_DLERROR 1
@@ -149,15 +149,15 @@
 #define HAVE_FCHMOD 1
 #define HAVE_FCNTL 1
 /* #undef HAVE_FCONVERT */
-/* #undef HAVE_FDATASYNC */
-/* #undef HAVE_DECL_FDATASYNC */
-/* #undef HAVE_FESETROUND */
+#define HAVE_FDATASYNC 1
+#define HAVE_DECL_FDATASYNC 1
+#define HAVE_FESETROUND 1
 #define HAVE_FINITE 1
 /* #undef HAVE_FP_EXCEPT */
-#define HAVE_FPSETMASK 1
+/* #undef HAVE_FPSETMASK */
 #define HAVE_FSEEKO 1
 #define HAVE_FSYNC 1
-/* #undef HAVE_FTIME */
+#define HAVE_FTIME 1
 #define HAVE_GETADDRINFO 1
 #define HAVE_GETCWD 1
 #define HAVE_GETHOSTBYADDR_R 1
@@ -176,35 +176,35 @@
 #define HAVE_GMTIME_R 1
 /* #undef gmtime_r */
 #define HAVE_INITGROUPS 1
-#define HAVE_ISSETUGID 1
+/* #undef HAVE_ISSETUGID */
 #define HAVE_GETUID 1
 #define HAVE_GETEUID 1
 #define HAVE_GETGID 1
 #define HAVE_GETEGID 1
 #define HAVE_ISNAN 1
 #define HAVE_ISINF 1
-/* #undef HAVE_LARGE_PAGE_OPTION */
+#define HAVE_LARGE_PAGE_OPTION 1
 #define HAVE_LDIV 1
 #define HAVE_LRAND48 1
 #define HAVE_LOCALTIME_R 1
 #define HAVE_LOG2 1
 #define HAVE_LONGJMP 1
 #define HAVE_LSTAT 1
-/* #undef HAVE_MEMALIGN */
+#define HAVE_MEMALIGN 1
 /* #define HAVE_MLOCK 1 see Bug#54662 */
-/* #undef HAVE_NPTL */
+#define HAVE_NPTL 1
 #define HAVE_NL_LANGINFO 1
 #define HAVE_MADVISE 1
 #define HAVE_DECL_MADVISE 1
 /* #undef HAVE_DECL_TGOTO */
 /* #undef HAVE_DECL_MHA_MAPSIZE_VA */
-/* #undef HAVE_MALLINFO */
+#define HAVE_MALLINFO 1
 #define HAVE_MEMCPY 1
 #define HAVE_MEMMOVE 1
 #define HAVE_MKSTEMP 1
 #define HAVE_MLOCKALL 1
 #define HAVE_MMAP 1
-/* #undef HAVE_MMAP64 */
+#define HAVE_MMAP64 1
 #define HAVE_PERROR 1
 #define HAVE_POLL 1
 /* #undef HAVE_PORT_CREATE */
@@ -234,7 +234,7 @@
 #define HAVE_PTHREAD_YIELD_ZERO_ARG 1
 #define PTHREAD_ONCE_INITIALIZER PTHREAD_ONCE_INIT
 #define HAVE_PUTENV 1
-/* #undef HAVE_RE_COMP */
+#define HAVE_RE_COMP 1
 #define HAVE_REGCOMP 1
 #define HAVE_READDIR_R 1
 #define HAVE_READLINK 1
@@ -261,9 +261,9 @@
 #define HAVE_STRERROR 1
 #define HAVE_STRCOLL 1
 #define HAVE_STRSIGNAL 1
-#define HAVE_STRLCPY 1
-#define HAVE_STRLCAT 1
-#define HAVE_FGETLN 1
+/* #undef HAVE_STRLCPY */
+/* #undef HAVE_STRLCAT */
+/* #undef HAVE_FGETLN */
 #define HAVE_STRNLEN 1
 #define HAVE_STRPBRK 1
 /* #undef HAVE_STRSEP */
@@ -304,11 +304,11 @@
 /* #undef HAVE_NETINET_IN6_H */
 #define HAVE_IPV6 1
 /* #undef ss_family */
-#define HAVE_SOCKADDR_IN_SIN_LEN 1
-#define HAVE_SOCKADDR_IN6_SIN6_LEN 1
+/* #undef HAVE_SOCKADDR_IN_SIN_LEN */
+/* #undef HAVE_SOCKADDR_IN6_SIN6_LEN */
 /* #undef HAVE_TIMESPEC_TS_SEC */
 #define STRUCT_DIRENT_HAS_D_INO 1
-#define STRUCT_DIRENT_HAS_D_NAMLEN 1
+/* #undef STRUCT_DIRENT_HAS_D_NAMLEN */
 #define SPRINTF_RETURNS_INT 1
 
 #define USE_MB 1
@@ -336,10 +336,19 @@
   #define SIZEOF_SIZE_T  SIZEOF_LONG
 #else
 /* No indentation, to fetch the lines from verification scripts */
-#define SIZEOF_LONG   8
-#define SIZEOF_VOIDP  8
-#define SIZEOF_CHARP  8
-#define SIZEOF_SIZE_T 8
+#if __X86_64__ || __amd64__
+# define SIZEOF_LONG   8
+# define SIZEOF_VOIDP  8
+# define SIZEOF_CHARP  8
+# define SIZEOF_SIZE_T 8
+# define SIZEOF_ULONG  8
+#else
+# define SIZEOF_LONG   4
+# define SIZEOF_VOIDP  4
+# define SIZEOF_CHARP  4
+# define SIZEOF_SIZE_T 4
+# define SIZEOF_ULONG  4
+#endif
 #endif
 
 #define SIZEOF_CHAR 1
@@ -354,15 +363,14 @@
 #define HAVE_LONG_LONG 1
 #define SIZEOF_OFF_T 8
 #define HAVE_OFF_T 1
-#define SIZEOF_SIGSET_T 16
+#define SIZEOF_SIGSET_T 128
 #define HAVE_SIGSET_T 1
 #define HAVE_SIZE_T 1
 /* #undef SIZEOF_UCHAR */
 /* #undef HAVE_UCHAR */
 #define SIZEOF_UINT 4
 #define HAVE_UINT 1
-/* #undef SIZEOF_ULONG */
-/* #undef HAVE_ULONG */
+#define HAVE_ULONG 1
 /* #undef SIZEOF_INT8 */
 /* #undef HAVE_INT8 */
 /* #undef SIZEOF_UINT8 */
@@ -416,7 +424,7 @@
 #endif
 
 
-/* #undef TARGET_OS_LINUX */
+#define TARGET_OS_LINUX 1
 
 #define HAVE_WCTYPE_H 1
 #define HAVE_WCHAR_H 1
@@ -463,23 +471,23 @@
 /* #undef MY_ATOMIC_MODE_RWLOCKS */
 #define HAVE_GCC_ATOMIC_BUILTINS 1
 /* #undef HAVE_SOLARIS_ATOMIC */
-/* #undef HAVE_DECL_SHM_HUGETLB */
-/* #undef HAVE_LARGE_PAGES */
-/* #undef HUGETLB_USE_PROC_MEMINFO */
+#define HAVE_DECL_SHM_HUGETLB 1
+#define HAVE_LARGE_PAGES 1
+#define HUGETLB_USE_PROC_MEMINFO 1
 /* #undef NO_FCNTL_NONBLOCK */
 #define NO_ALARM 1
 
 /* #undef _LARGE_FILES */
 #define _LARGEFILE_SOURCE 1
 /* #undef _LARGEFILE64_SOURCE */
-/* #undef _FILE_OFFSET_BITS */
+#define _FILE_OFFSET_BITS 64
 
 #define TIME_WITH_SYS_TIME 1
 
 #define STACK_DIRECTION -1
 
-#define SYSTEM_TYPE "FreeBSD9.0"
-#define MACHINE_TYPE "amd64"
+#define SYSTEM_TYPE "Linux"
+#define MACHINE_TYPE "i686"
 /* #undef HAVE_DTRACE */
 
 #define SIGNAL_WITH_VIO_CLOSE 1
@@ -627,7 +635,7 @@
 
 /* time_t related defines */
 
-#define SIZEOF_TIME_T 8
+#define SIZEOF_TIME_T 4
 /* #undef TIME_T_UNSIGNED */
 
 #endif

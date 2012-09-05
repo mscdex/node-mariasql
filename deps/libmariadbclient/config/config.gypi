@@ -10,47 +10,23 @@
   'cflags': [ '-O3' ],
   'conditions': [
     [ 'OS=="win"', {
-      'conditions': [
-        ['target_arch=="ia32"', {
-          'include_dirs': [ 'win-x86' ],
-        }, {
-          'include_dirs': [ 'win-x64' ],
-        }],
-      ],
+      'include_dirs': [ 'win' ],
     }, {
       'defines': [ 'HAVE_CONFIG_H', ],
     }],
     [ 'OS=="linux"', {
-      'conditions': [
-        ['target_arch=="ia32"', {
-          'include_dirs': [ 'linux-x86' ],
-        }, {
-          'include_dirs': [ 'linux-x64' ],
-        }],
-      ],
+      'include_dirs': [ 'linux' ],
     }],
     [ 'OS=="mac"', {
-      'conditions': [
-        ['target_arch=="ia32"', {
-          'include_dirs': [ 'mac-x86' ],
-        }, {
-          'include_dirs': [ 'mac-x64' ],
-        }],
-      ],
+      'include_dirs': [ 'mac' ],
     }],
     [ 'OS=="freebsd"', {
       'libraries': [
         '-L/usr/local/lib -lexecinfo',
       ],
       'include_dirs': [
+        'freebsd',
         '/usr/local/include',
-      ],
-      'conditions': [
-        ['target_arch=="ia32"', {
-          'include_dirs': [ 'freebsd-x86' ],
-        }, {
-          'include_dirs': [ 'freebsd-x64' ],
-        }],
       ],
     }],
   ],

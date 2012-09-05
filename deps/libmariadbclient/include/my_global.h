@@ -76,7 +76,8 @@
 #define CPP_UNNAMED_NS_END    }
 #endif
 
-#include <my_config.h>
+/* Simplify configuration file references -bw */
+#include <config.h>
 
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
 #define HAVE_PSI_INTERFACE
