@@ -30,6 +30,8 @@ static Persistent<String> cfg_pwd_symbol;
 static Persistent<String> cfg_host_symbol;
 static Persistent<String> cfg_port_symbol;
 static Persistent<String> cfg_db_symbol;
+static Persistent<String> cfg_timeout_symbol;
+static Persistent<String> cfg_secauth_symbol;
 static Persistent<String> cfg_multi_symbol;
 static Persistent<String> cfg_compress_symbol;
 static Persistent<String> cfg_ssl_symbol;
@@ -729,6 +731,8 @@ class Client : public ObjectWrap {
       Local<Value> ip_v = cfg->Get(cfg_host_symbol);
       Local<Value> port_v = cfg->Get(cfg_port_symbol);
       Local<Value> db_v = cfg->Get(cfg_db_symbol);
+      Local<Value> timeout_v = cfg->Get(cfg_timeout_symbol);
+      Local<Value> secauth_v = cfg->Get(cfg_secauth_symbol);
       Local<Value> multi_v = cfg->Get(cfg_multi_symbol);
       Local<Value> compress_v = cfg->Get(cfg_compress_symbol);
       Local<Value> ssl_v = cfg->Get(cfg_ssl_symbol);
@@ -763,6 +767,17 @@ class Client : public ObjectWrap {
         String::Utf8Value db_s(db_v);
         obj->config.db = strdup(*db_s);
       }
+
+      unsigned int timeout = 10;
+      if (timeout_v->IsUint32() && timeout_v->Uint32Value() > 0)
+        timeout = timeout_v->Uint32Value();
+      mysql_options(&obj->mysql, MYSQL_OPT_CONNECT_TIMEOUT, &timeout);
+
+      if (!secauth_v->IsBoolean()
+          || (secauth_v->IsBoolean() && secauth_v->BooleanValue()))
+        mysql_options(&obj->mysql, MYSQL_SECURE_AUTH, &MY_BOOL_TRUE);
+      else
+        mysql_options(&obj->mysql, MYSQL_SECURE_AUTH, &MY_BOOL_FALSE);
 
       if (multi_v->IsBoolean() && multi_v->BooleanValue())
         obj->config.client_opts |= CLIENT_MULTI_STATEMENTS;
@@ -910,6 +925,8 @@ class Client : public ObjectWrap {
       cfg_host_symbol = NODE_PSYMBOL("host");
       cfg_port_symbol = NODE_PSYMBOL("port");
       cfg_db_symbol = NODE_PSYMBOL("db");
+      cfg_timeout_symbol = NODE_PSYMBOL("connTimeout");
+      cfg_secauth_symbol = NODE_PSYMBOL("secureAuth");
       cfg_multi_symbol = NODE_PSYMBOL("multiStatements");
       cfg_compress_symbol = NODE_PSYMBOL("compress");
       cfg_ssl_symbol = NODE_PSYMBOL("ssl");

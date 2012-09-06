@@ -173,6 +173,10 @@ Client methods
 
     * **db** - <_string_> - A database to automatically select after authentication. **Default:** (no db)
 
+    * **connTimeout** - <_integer_> - Number of seconds to wait for a connection to be made. **Default:** 10
+
+    * **secureAuth** - <_boolean_> - Use password hashing available in MySQL 4.1.1+ when authenticating. **Default:** true
+
     * **compress** - <_boolean_> - Use connection compression? **Default:** false
 
     * **ssl** - <_mixed_> - If boolean true, defaults listed below and default ciphers will be used, otherwise it must be an object with any of the following valid properties: **Default:** false
@@ -242,8 +246,6 @@ TODO
 * Auto-reconnect algorithm(s) ?
 
 * Method to change character set
-
-* More connection options (connection timeout, query timeout, disable MySQL 4.1-style password auth)
 
 * Periodic ping to keep connection alive
 
