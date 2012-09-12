@@ -941,6 +941,23 @@ class Client : public ObjectWrap {
     }
 };
 
+static Handle<Value> Escape(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() == 0 || !args[0]->IsString()) {
+    return ThrowException(Exception::Error(
+      String::New("You must supply a string"))
+    );
+  }
+  String::Value arg_v(args[0]);
+  unsigned long arg_len = arg_v.length();
+  char *result = (char*) malloc(arg_len * 2 + 1);
+  unsigned long result_len = mysql_escape_string(result, (char*)*arg_v, arg_len);
+  Local<String> escaped_s = String::New(result, result_len);
+  free(result);
+  return scope.Close(escaped_s);
+}
+
 static Handle<Value> Version(const Arguments& args) {
   HandleScope scope;
   return scope.Close(String::New(mysql_get_client_info()));
@@ -950,6 +967,8 @@ extern "C" {
   void init(Handle<Object> target) {
     HandleScope scope;
     Client::Initialize(target);
+    target->Set(String::NewSymbol("escape"),
+                FunctionTemplate::New(Escape)->GetFunction());
     target->Set(String::NewSymbol("version"),
                 FunctionTemplate::New(Version)->GetFunction());
   }
