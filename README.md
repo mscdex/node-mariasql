@@ -65,7 +65,113 @@ c.query('SHOW DATABASES')
    });
  })
  .on('end', function() {
-  console.log('Done with all queries');
+   console.log('Done with all queries');
+ });
+
+c.end();
+```
+
+* Use placeholders in a query
+
+```javascript
+var inspect = require('util').inspect;
+var Client = require('mariasql');
+
+var c = new Client();
+c.connect({
+  host: '127.0.0.1',
+  user: 'foo',
+  password: 'bar',
+  db: 'mydb'
+});
+
+c.on('connect', function() {
+   console.log('Client connected');
+ })
+ .on('error', function(err) {
+   console.log('Client error: ' + err);
+ })
+ .on('close', function(hadError) {
+   console.log('Client closed');
+ });
+
+c.query('SELECT * FROM users WHERE id = :id AND name = :name',
+        { id: 1337, name: 'Frylock' })
+ .on('result', function(res) {
+   res.on('row', function(row) {
+     console.log('Query row: ' + inspect(row));
+   })
+   .on('error', function(err) {
+     console.log('Query error: ' + inspect(err));
+   })
+   .on('end', function(info) {
+     console.log('Query finished successfully');
+   });
+ })
+ .on('end', function() {
+   console.log('Done with all queries');
+ });
+
+c.query('SELECT * FROM users WHERE id = ? AND name = ?',
+        [ 1337, 'Frylock' ])
+ .on('result', function(res) {
+   res.on('row', function(row) {
+     console.log('Query row: ' + inspect(row));
+   })
+   .on('error', function(err) {
+     console.log('Query error: ' + inspect(err));
+   })
+   .on('end', function(info) {
+     console.log('Query finished successfully');
+   });
+ })
+ .on('end', function() {
+   console.log('Done with all queries');
+ });
+
+c.end();
+```
+
+* Explicitly generate a prepared query for later use
+
+```javascript
+var inspect = require('util').inspect;
+var Client = require('mariasql');
+
+var c = new Client();
+c.connect({
+  host: '127.0.0.1',
+  user: 'foo',
+  password: 'bar',
+  db: 'mydb'
+});
+
+c.on('connect', function() {
+   console.log('Client connected');
+ })
+ .on('error', function(err) {
+   console.log('Client error: ' + err);
+ })
+ .on('close', function(hadError) {
+   console.log('Client closed');
+ });
+
+var pq = c.prepare('SELECT * FROM users WHERE id = :id AND name = :name');
+
+c.query(pq({ id: 1337, name: 'Frylock' }))
+ .on('result', function(res) {
+   res.on('row', function(row) {
+     console.log('Query row: ' + inspect(row));
+   })
+   .on('error', function(err) {
+     console.log('Query error: ' + inspect(err));
+   })
+   .on('end', function(info) {
+     console.log('Query finished successfully');
+   });
+ })
+ .on('end', function() {
+   console.log('Done with all queries');
  });
 
 c.end();
@@ -113,7 +219,7 @@ c.query('SELECT "first query"; SELECT "second query"; SELECT "third query"', tru
    });
  })
  .on('end', function() {
-  console.log('Done with all queries');
+   console.log('Done with all queries');
  });
 
 c.end();
@@ -252,8 +358,6 @@ TODO
 ====
 
 * Auto-reconnect algorithm(s) ?
-
-* Method to change character set
 
 * Periodic ping to keep connection alive
 
