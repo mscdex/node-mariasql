@@ -949,10 +949,11 @@ static Handle<Value> Escape(const Arguments& args) {
       String::New("You must supply a string"))
     );
   }
-  String::Value arg_v(args[0]);
+  String::Utf8Value arg_v(args[0]);
   unsigned long arg_len = arg_v.length();
   char *result = (char*) malloc(arg_len * 2 + 1);
-  unsigned long result_len = mysql_escape_string(result, (char*)*arg_v, arg_len);
+  unsigned long result_len =
+          mysql_escape_string_ex(result, (char*)*arg_v, arg_len, "utf8");
   Local<String> escaped_s = String::New(result, result_len);
   free(result);
   return scope.Close(escaped_s);
