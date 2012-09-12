@@ -570,6 +570,8 @@ int             STDCALL mysql_list_fields_cont(MYSQL_RES **ret, MYSQL *mysql,
                                                int status);
 unsigned long	STDCALL mysql_escape_string(char *to,const char *from,
 					    unsigned long from_length);
+unsigned long STDCALL mysql_escape_string_ex(char *to,const char *from,
+              unsigned long from_length,const char *set);
 unsigned long	STDCALL mysql_hex_string(char *to,const char *from,
                                          unsigned long from_length);
 unsigned long STDCALL mysql_real_escape_string(MYSQL *mysql,

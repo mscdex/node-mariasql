@@ -1188,6 +1188,21 @@ mysql_escape_string(char *to,const char *from,ulong length)
   return (uint) escape_string_for_mysql(default_charset_info, to, 0, from, length);
 }
 
+/*
+  Add ability to specify character set
+*/
+
+ulong STDCALL
+mysql_escape_string_ex(char *to,const char *from,ulong length,const char *set)
+{
+  CHARSET_INFO *charset = default_charset_info;
+  if (set == "utf8")
+    charset = &my_charset_utf8_general_ci;
+  else if (set == "latin1")
+    charset = &my_charset_latin1;
+  return (uint) escape_string_for_mysql(charset, to, 0, from, length);
+}
+
 ulong STDCALL
 mysql_real_escape_string(MYSQL *mysql, char *to,const char *from,
 			 ulong length)
