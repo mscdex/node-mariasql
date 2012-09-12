@@ -193,7 +193,9 @@ Client methods
 
         * **rejectUnauthorized** - <_boolean_> - If true, the connection will be rejected if the Common Name value does not match that of the host name. **Default:** false
 
-* **query**(<_string_>query[, <_boolean_>useArray=false]) - <_Results_> - Enqueues the given `query` and returns a _Results_ object. If `useArray` is set to true, then an array of field values are returned instead of an object of fieldName=>fieldValue pairs. (Note: using arrays performs much faster)
+* **query**(<_string_>query[, <_mixed_>values[, <_boolean_>useArray=false]]) - <_Results_> - Enqueues the given `query` and returns a _Results_ object. `values` can be an object or array containing values to be used when replacing placeholders in `query` (see prepare()). If `useArray` is set to true, then an array of field values are returned instead of an object of fieldName=>fieldValue pairs. (Note: using arrays performs much faster)
+
+* **prepare**(<_string_>query) - <_function_> - Generates a re-usable function for `query` when it contains placeholders (can be simple `?` position-based or named `:foo_bar1` placeholders or any combination of the two). In the case that the function does contain placeholders, the generated function is cached per-connection if it is not already in the cache (currently the cache will hold at most **30** prepared queries). The returned function takes an object or array and returns the query with the placeholders replaced by the values in the object or array.
 
 * **escape**(<_string_>value) - <_string_> - Escapes `value` for use in queries. **_This method requires a live connection_**.
 
@@ -202,6 +204,12 @@ Client methods
 * **destroy**() - _(void)_ - Closes the connection immediately, even if there are other queries still in the queue.
 
 * **isMariaDB**() - <_boolean_> - Returns true if the remote server is MariaDB.
+
+
+Client static methods
+---------------------
+
+* **escape**(<_string_>value) - <_string_> - Escapes `value` for use in queries. **_This method does not take into account character encodings_**.
 
 
 Results events
