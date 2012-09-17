@@ -13,6 +13,9 @@ behavior.
 
 This binding has been tested on Windows, Linux, and Mac (OSX 10.6).
 
+Benchmarks comparing this module to the other node.js MySQL driver modules can be
+found [here](http://mscdex.github.com/node-mysql-benchmarks).
+
 
 Requirements
 ============
