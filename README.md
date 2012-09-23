@@ -284,6 +284,8 @@ Client methods
 
     * **connTimeout** - <_integer_> - Number of seconds to wait for a connection to be made. **Default:** 10
 
+    * **pingInterval** - <_integer_> - Number of seconds between pings while idle. **Default:** 300
+
     * **secureAuth** - <_boolean_> - Use password hashing available in MySQL 4.1.1+ when authenticating. **Default:** true
 
     * **compress** - <_boolean_> - Use connection compression? **Default:** false
@@ -361,8 +363,6 @@ TODO
 ====
 
 * Auto-reconnect algorithm(s) ?
-
-* Periodic ping to keep connection alive
 
 * API to execute "KILL QUERY _client_threadId_" easily
 
