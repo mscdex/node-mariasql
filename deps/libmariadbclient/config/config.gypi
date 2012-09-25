@@ -7,7 +7,12 @@
     'YASSL_THREAD_SAFE',
     'DBUG_OFF',
   ],
-  'cflags': [ '-O3' ],
+  'cflags!': [ '-O2' ],
+  'cflags+': [ '-O3' ],
+  'cflags_cc!': [ '-O2' ],
+  'cflags_cc+': [ '-O3' ],
+  'cflags_c!': [ '-O2' ],
+  'cflags_c+': [ '-O3' ],
   'conditions': [
     [ 'OS=="win"', {
       'include_dirs': [ 'win' ],
