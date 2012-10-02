@@ -8,7 +8,6 @@ using namespace node;
 using namespace v8;
 
 static Persistent<FunctionTemplate> Client_constructor;
-static Persistent<Function> Emit;
 static Persistent<String> emit_symbol;
 static Persistent<String> connect_symbol;
 static Persistent<String> resquery_symbol;
@@ -158,6 +157,7 @@ const my_bool MY_BOOL_TRUE = 1,
 
 class Client : public ObjectWrap {
   public:
+    Persistent<Function> Emit;
     uv_poll_t *poll_handle;
     uv_os_sock_t mysql_sock;
     MYSQL mysql, *mysql_ret;
@@ -173,6 +173,8 @@ class Client : public ObjectWrap {
     ~Client() {
       destructing = true;
       close();
+      Emit.Dispose();
+      Emit.Clear();
     }
 
     void init() {
@@ -252,7 +254,7 @@ class Client : public ObjectWrap {
         close_symbol,
         Local<Boolean>::New(Boolean::New(obj->had_error))
       };
-      Emit->Call(obj->handle_, 2, emit_argv);
+      obj->Emit->Call(obj->handle_, 2, emit_argv);
       if (try_catch.HasCaught())
         FatalException(try_catch);
       FREE(obj->poll_handle);
@@ -285,7 +287,6 @@ class Client : public ObjectWrap {
       int status = 0, new_events = 0;
       bool done = false;
       while (!done) {
-//printf("STATE BEFORE: %s\n", STATE_TEXT(state));
         switch (state) {
           case STATE_CONNECT:
             status = mysql_real_connect_start(&mysql_ret, &mysql,
@@ -532,7 +533,6 @@ class Client : public ObjectWrap {
           case STATE_CLOSED:
             return;
         }
-//printf("STATE AFTER (%s): %s\n", done ? "done" : "not done", STATE_TEXT(state));
       }
       if (status & MYSQL_WAIT_READ)
         new_events |= UV_READABLE;
@@ -678,11 +678,9 @@ class Client : public ObjectWrap {
       obj->Wrap(args.This());
       obj->Ref();
 
-      if (Emit.IsEmpty()) {
-        Emit = Persistent<Function>::New(
-                  Local<Function>::Cast(obj->handle_->Get(emit_symbol))
-               );
-      }
+      obj->Emit = Persistent<Function>::New(
+                    Local<Function>::Cast(obj->handle_->Get(emit_symbol))
+                  );
 
       return args.This();
     }
