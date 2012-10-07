@@ -58,17 +58,17 @@ c.on('connect', function() {
 c.query('SHOW DATABASES')
  .on('result', function(res) {
    res.on('row', function(row) {
-     console.log('Query row: ' + inspect(row));
+     console.log('Result row: ' + inspect(row));
    })
    .on('error', function(err) {
-     console.log('Query error: ' + inspect(err));
+     console.log('Result error: ' + inspect(err));
    })
    .on('end', function(info) {
-     console.log('Query finished successfully');
+     console.log('Result finished successfully');
    });
  })
  .on('end', function() {
-   console.log('Done with all queries');
+   console.log('Done with all results');
  });
 
 c.end();
@@ -102,34 +102,34 @@ c.query('SELECT * FROM users WHERE id = :id AND name = :name',
         { id: 1337, name: 'Frylock' })
  .on('result', function(res) {
    res.on('row', function(row) {
-     console.log('Query row: ' + inspect(row));
+     console.log('Result row: ' + inspect(row));
    })
    .on('error', function(err) {
-     console.log('Query error: ' + inspect(err));
+     console.log('Result error: ' + inspect(err));
    })
    .on('end', function(info) {
-     console.log('Query finished successfully');
+     console.log('Result finished successfully');
    });
  })
  .on('end', function() {
-   console.log('Done with all queries');
+   console.log('Done with all results');
  });
 
 c.query('SELECT * FROM users WHERE id = ? AND name = ?',
         [ 1337, 'Frylock' ])
  .on('result', function(res) {
    res.on('row', function(row) {
-     console.log('Query row: ' + inspect(row));
+     console.log('Result row: ' + inspect(row));
    })
    .on('error', function(err) {
-     console.log('Query error: ' + inspect(err));
+     console.log('Result error: ' + inspect(err));
    })
    .on('end', function(info) {
-     console.log('Query finished successfully');
+     console.log('Result finished successfully');
    });
  })
  .on('end', function() {
-   console.log('Done with all queries');
+   console.log('Done with all results');
  });
 
 c.end();
@@ -164,17 +164,17 @@ var pq = c.prepare('SELECT * FROM users WHERE id = :id AND name = :name');
 c.query(pq({ id: 1337, name: 'Frylock' }))
  .on('result', function(res) {
    res.on('row', function(row) {
-     console.log('Query row: ' + inspect(row));
+     console.log('Result row: ' + inspect(row));
    })
    .on('error', function(err) {
-     console.log('Query error: ' + inspect(err));
+     console.log('Result error: ' + inspect(err));
    })
    .on('end', function(info) {
-     console.log('Query finished successfully');
+     console.log('Result finished successfully');
    });
  })
  .on('end', function() {
-   console.log('Done with all queries');
+   console.log('Done with all results');
  });
 
 c.end();
