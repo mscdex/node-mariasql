@@ -26,7 +26,7 @@ Requirements
 Install
 ============
 
-npm install mariasql
+    npm install mariasql
 
 
 Examples
