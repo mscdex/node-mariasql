@@ -297,6 +297,8 @@ class Client : public ObjectWrap {
                                               config.port,
                                               NULL,
                                               config.client_opts);
+            if (!mysql_ret)
+              return emit_error(err_symbol, true);
             mysql_sock = mysql_get_socket(&mysql);
             poll_handle = (uv_poll_t*) malloc(sizeof(uv_poll_t));
             uv_poll_init_socket(uv_default_loop(), poll_handle,
