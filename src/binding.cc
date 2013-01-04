@@ -653,7 +653,9 @@ class Client : public ObjectWrap {
             new_buf[i] = buf[i];
           field_value = String::New(new_buf, vlen);
           delete new_buf;
-        } else
+        } else if (IS_NUM(fields[f].type) && fields[f].type != MYSQL_TYPE_LONGLONG)
+          field_value = Number::New(atof(cur_query.row[f]));
+         else
           field_value = String::New(cur_query.row[f], lengths[f]);
         if (cur_query.use_array)
           row->Set(f, field_value);
