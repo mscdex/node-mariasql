@@ -10,6 +10,8 @@
         'src/algebra.cpp',
         'src/arc4.cpp',
         'src/asn.cpp',
+        'src/bftables.cpp',
+        'src/blowfish.cpp',
         'src/coding.cpp',
         'src/des.cpp',
         'src/dh.cpp',
@@ -26,6 +28,8 @@
         'src/rsa.cpp',
         'src/sha.cpp',
         'src/rabbit.cpp',
+        'src/twofish.cpp',
+        'src/tftables.cpp',
         'src/hc128.cpp',
       ],
       'include_dirs': [
