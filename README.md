@@ -1,4 +1,3 @@
-
 Description
 ===========
 
@@ -21,6 +20,7 @@ Requirements
 ============
 
 * [node.js](http://nodejs.org/) -- v0.8.0 or newer
+* [node-gyp](https://github.com/TooTallNate/node-gyp)
 
 
 Install
