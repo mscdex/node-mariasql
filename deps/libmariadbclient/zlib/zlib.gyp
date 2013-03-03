@@ -7,6 +7,7 @@
     {
       'target_name': 'zlib',
       'type': 'static_library',
+      'standalone_static_library': 1,
       'cflags': [ '-O3' ],
       'sources': [
         'adler32.c',

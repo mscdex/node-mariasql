@@ -3,6 +3,7 @@
     {
       'target_name': 'yassl',
       'type': 'static_library',
+      'standalone_static_library': 1,
       'includes': [ '../../config/config.gypi' ],
       'sources': [
         'src/buffer.cpp',

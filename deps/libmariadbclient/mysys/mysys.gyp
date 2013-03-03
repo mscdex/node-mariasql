@@ -3,6 +3,7 @@
     {
       'target_name': 'mysys',
       'type': 'static_library',
+      'standalone_static_library': 1,
       'includes': [ '../config/config.gypi' ],
       'cflags!': [ '-O3' ],
       'cflags_cc!': [ '-O3' ],
