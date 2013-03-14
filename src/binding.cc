@@ -2,6 +2,7 @@
 #include <node_buffer.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <mysql.h>
 
 using namespace node;
