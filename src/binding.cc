@@ -85,7 +85,7 @@ const int STATE_NULL = -100,
      s == STATE_QUERYERR ? "QUERYERR" :             \
      s == STATE_ABORT ? "ABORT" : ""                \
     )
-        
+
 
 enum abort_t { ABORT_NONE, ABORT_QUERY, ABORT_RESULTS };
 
