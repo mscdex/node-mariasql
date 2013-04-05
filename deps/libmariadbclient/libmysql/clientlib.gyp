@@ -19,6 +19,11 @@
       ],
       'dependencies': [
         '../mysys/mysys.gyp:mysys',
+        '../zlib/zlib.gyp:zlib',
+        '../vio/vio.gyp:vio',
+        '../strings/strings.gyp:strings',
+        '../extra/yassl/yassl.gyp:yassl',
+        '../extra/yassl/taocrypt/taocrypt.gyp:taocrypt',
       ],
       'include_dirs': [
         '.',
