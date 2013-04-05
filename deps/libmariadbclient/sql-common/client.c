@@ -2229,7 +2229,7 @@ mysql_set_character_set_with_default_collation(MYSQL *mysql)
     CHARSET_INFO *collation;
     if ((collation= 
          get_charset_by_name(MYSQL_DEFAULT_COLLATION_NAME, MYF(MY_WME))) &&
-                             my_charset_same(mysql->charset, collation))
+                             ((mysql->charset == collation) || !strcmp(mysql->charset->csname,collation->csname)))//my_charset_same(mysql->charset, collation))
     {
       mysql->charset= collation;
     }

@@ -13,9 +13,9 @@
       ],
       'include_dirs': [
         '.',
-        '../include',
         '../extra/yassl/include',
         '../extra/yassl/taocrypt/include',
+        '../include',
       ],
     },
   ],

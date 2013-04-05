@@ -35,6 +35,12 @@ static my_bool win32_init_tcp_ip();
 #define my_win_init()
 #endif
 
+/*
+  this can be set to 1 if we leak memory and know it
+  (to disable memory leak tests on exit)
+*/
+int sf_leaking_memory= 0;
+
 extern pthread_key(struct st_my_thread_var*, THR_KEY_mysys);
 
 #define SCALE_SEC       100

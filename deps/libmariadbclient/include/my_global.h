@@ -19,6 +19,7 @@
 #ifndef _global_h
 #define _global_h
 
+
 /* Client library users on Windows need this macro defined here. */
 #if !defined(__WIN__) && defined(_WIN32)
 #define __WIN__
