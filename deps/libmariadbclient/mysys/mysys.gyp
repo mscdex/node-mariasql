@@ -8,8 +8,8 @@
       'cflags!': [ '-O3' ],
       'cflags_cc!': [ '-O3' ],
       'cflags_c!': [ '-O3' ],
-      'cflags+': [ '-O2' ],
-      'cflags_c+': [ '-O2' ],
+      'cflags+': [ '-O2', '-g' ],
+      'cflags_c+': [ '-O2', '-g' ],
       'cflags_cc+': [ '-O2' ],
       'conditions': [
         [ 'OS=="win"', {
