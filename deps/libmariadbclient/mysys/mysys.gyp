@@ -20,6 +20,10 @@
             'my_winfile.c',
             'my_winthread.c',
           ],
+        }, {
+          'sources': [
+            'my_sync.c',
+          ],
         }],
       ],
       'sources': [
