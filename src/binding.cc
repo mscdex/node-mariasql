@@ -701,7 +701,7 @@ class Client : public ObjectWrap {
           String::New("You must supply a string"))
         );
       }
-      String::Value arg_v(args[0]);
+      String::Utf8Value arg_v(args[0]);
       unsigned long arg_len = arg_v.length();
       char *result = (char*) malloc(arg_len * 2 + 1);
       unsigned long result_len = obj->escape((char*)*arg_v, arg_len, result);
