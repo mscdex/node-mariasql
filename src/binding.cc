@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <string>
 #include <mysql.h>
 
 using namespace node;
@@ -547,6 +548,17 @@ class Client : public ObjectWrap {
     static void cb_poll(uv_poll_t *handle, int status, int events) {
       HandleScope scope;
       Client *obj = (Client*) handle->data;
+
+      // for some reason no MySQL error is set when it cannot connect on *nix,
+      // so we check for the invalid FD here ...
+      if (status != 0 && uv_last_error(uv_default_loop()).code == EBADF
+          && obj->state == STATE_CONNECTING) {
+        std::string errmsg("Can't connect to MySQL server on '");
+        errmsg += obj->config.ip;
+        errmsg += "' (0)";
+        obj->emit_error(err_symbol, true, 2003, errmsg.c_str());
+        return;
+      }
       assert(status == 0);
 
       int mysql_status = 0;
