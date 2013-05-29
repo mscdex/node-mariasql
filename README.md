@@ -280,9 +280,11 @@ Client methods
 
     * **unixSocket** - < _string_ > - Path to a unix socket to connect to (host and port are ignored). **Default:** (none)
 
-    * **multiStatements** - < _boolean_ > - Allow multiple statements to be executed in a single "query" (e.g. `connection.query('SELECT 1; SELECT 2; SELECT 3')`) on this connection. **Default:** false
-
     * **db** - < _string_ > - A database to automatically select after authentication. **Default:** (no db)
+
+    * **keepQueries** - < _boolean_ > - Keep query queue when connection closes? **Default:** false
+
+    * **multiStatements** - < _boolean_ > - Allow multiple statements to be executed in a single "query" (e.g. `connection.query('SELECT 1; SELECT 2; SELECT 3')`) on this connection. **Default:** false
 
     * **connTimeout** - < _integer_ > - Number of seconds to wait for a connection to be made. **Default:** 10
 
