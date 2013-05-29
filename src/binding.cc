@@ -665,7 +665,7 @@ class Client : public ObjectWrap {
           for (i = 0; i < vlen; ++i)
             new_buf[i] = buf[i];
           field_value = String::New(new_buf, vlen);
-          delete new_buf;
+          delete[] new_buf;
         } else
           field_value = String::New(cur_query.row[f], lengths[f]);
         if (cur_query.use_array)
