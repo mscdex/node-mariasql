@@ -30,6 +30,7 @@ static Persistent<String> cfg_user_symbol;
 static Persistent<String> cfg_pwd_symbol;
 static Persistent<String> cfg_host_symbol;
 static Persistent<String> cfg_port_symbol;
+static Persistent<String> cfg_socket_symbol;
 static Persistent<String> cfg_db_symbol;
 static Persistent<String> cfg_timeout_symbol;
 static Persistent<String> cfg_secauth_symbol;
@@ -95,6 +96,7 @@ struct sql_config {
   char *password;
   char *ip;
   char *db;
+  char *socket;
   unsigned int port;
   unsigned long client_opts;
 
@@ -184,6 +186,7 @@ class Client : public ObjectWrap {
       config.password = NULL;
       config.ip = NULL;
       config.db = NULL;
+      config.socket = NULL;
       config.client_opts = CLIENT_MULTI_RESULTS | CLIENT_REMEMBER_OPTIONS;
       config.ssl_key = NULL;
       config.ssl_cert = NULL;
@@ -217,6 +220,7 @@ class Client : public ObjectWrap {
       FREE(config.user);
       FREE(config.password);
       FREE(config.ip);
+      FREE(config.socket);
       FREE(config.db);
       FREE(config.ssl_key);
       FREE(config.ssl_cert);
@@ -297,7 +301,7 @@ class Client : public ObjectWrap {
                                               config.password,
                                               config.db,
                                               config.port,
-                                              NULL,
+                                              config.socket,
                                               config.client_opts);
             if (!mysql_ret && mysql_errno(&mysql) > 0)
               return emit_error(err_symbol, true);
@@ -554,7 +558,10 @@ class Client : public ObjectWrap {
       if (status != 0 && uv_last_error(uv_default_loop()).code == EBADF
           && obj->state == STATE_CONNECTING) {
         std::string errmsg("Can't connect to MySQL server on '");
-        errmsg += obj->config.ip;
+        if (obj->config.socket)
+          errmsg += obj->config.socket;
+        else
+          errmsg += obj->config.ip;
         errmsg += "' (0)";
         obj->emit_error(err_symbol, true, 2003, errmsg.c_str());
         return;
@@ -743,6 +750,7 @@ class Client : public ObjectWrap {
       Local<Value> password_v = cfg->Get(cfg_pwd_symbol);
       Local<Value> ip_v = cfg->Get(cfg_host_symbol);
       Local<Value> port_v = cfg->Get(cfg_port_symbol);
+      Local<Value> socket_v = cfg->Get(cfg_socket_symbol);
       Local<Value> db_v = cfg->Get(cfg_db_symbol);
       Local<Value> timeout_v = cfg->Get(cfg_timeout_symbol);
       Local<Value> secauth_v = cfg->Get(cfg_secauth_symbol);
@@ -769,6 +777,13 @@ class Client : public ObjectWrap {
       else {
         String::Utf8Value ip_s(ip_v);
         obj->config.ip = strdup(*ip_s);
+      }
+
+      if (!socket_v->IsString() || socket_v->ToString()->Length() == 0)
+        obj->config.socket = NULL;
+      else {
+        String::Utf8Value socket_s(socket_v);
+        obj->config.socket = strdup(*socket_s);
       }
 
       if (!port_v->IsUint32() || port_v->Uint32Value() == 0)
@@ -937,6 +952,7 @@ class Client : public ObjectWrap {
       cfg_pwd_symbol = NODE_PSYMBOL("password");
       cfg_host_symbol = NODE_PSYMBOL("host");
       cfg_port_symbol = NODE_PSYMBOL("port");
+      cfg_socket_symbol = NODE_PSYMBOL("unixSocket");
       cfg_db_symbol = NODE_PSYMBOL("db");
       cfg_timeout_symbol = NODE_PSYMBOL("connTimeout");
       cfg_secauth_symbol = NODE_PSYMBOL("secureAuth");
