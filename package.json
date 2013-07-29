@@ -1,5 +1,5 @@
 { "name": "mariasql",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "author": "Brian White <mscdex@mscdex.net>",
   "description": "A node.js binding to MariaDB's non-blocking (MySQL-compatible) client library",
   "main": "./lib/Client",
