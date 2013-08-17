@@ -295,7 +295,8 @@ class Client : public ObjectWrap {
       while (!done) {
         switch (state) {
           case STATE_CONNECT:
-            status = mysql_real_connect_start(&mysql_ret, &mysql,
+            status = mysql_real_connect_start(&mysql_ret,
+                                              &mysql,
                                               config.ip,
                                               config.user,
                                               config.password,
@@ -305,12 +306,16 @@ class Client : public ObjectWrap {
                                               config.client_opts);
             if (!mysql_ret && mysql_errno(&mysql) > 0)
               return emit_error(err_symbol, true);
+
             mysql_sock = mysql_get_socket(&mysql);
+
             poll_handle = (uv_poll_t*) malloc(sizeof(uv_poll_t));
-            uv_poll_init_socket(uv_default_loop(), poll_handle,
+            uv_poll_init_socket(uv_default_loop(),
+                                poll_handle,
                                 mysql_sock);
             uv_poll_start(poll_handle, UV_READABLE, cb_poll);
             poll_handle->data = this;
+
             if (status) {
               done = true;
               state = STATE_CONNECTING;
@@ -321,6 +326,7 @@ class Client : public ObjectWrap {
             break;
           case STATE_CONNECTING:
             status = mysql_real_connect_cont(&mysql_ret, &mysql, event);
+
             if (status)
               done = true;
             else {
@@ -339,7 +345,8 @@ class Client : public ObjectWrap {
               state = STATE_ABORT;
             } else {
               had_error = false;
-              status = mysql_real_query_start(&cur_query.err, &mysql,
+              status = mysql_real_query_start(&cur_query.err,
+                                              &mysql,
                                               cur_query.str,
                                               strlen(cur_query.str));
               if (status) {
@@ -359,7 +366,8 @@ class Client : public ObjectWrap {
             }
             break;
           case STATE_QUERYING:
-            status = mysql_real_query_cont(&cur_query.err, &mysql,
+            status = mysql_real_query_cont(&cur_query.err,
+                                           &mysql,
                                            mysql_status(event));
             if (status)
               done = true;
@@ -466,7 +474,8 @@ class Client : public ObjectWrap {
             }
             break;
           case STATE_NEXTQUERYING:
-            status = mysql_next_result_cont(&cur_query.err, &mysql,
+            status = mysql_next_result_cont(&cur_query.err,
+                                            &mysql,
                                             mysql_status(event));
             if (status)
               done = true;
@@ -675,6 +684,7 @@ class Client : public ObjectWrap {
           delete[] new_buf;
         } else
           field_value = String::New(cur_query.row[f], lengths[f]);
+
         if (cur_query.use_array)
           row->Set(f, field_value);
         else
