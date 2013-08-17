@@ -410,16 +410,13 @@ class Client : public ObjectWrap {
             }
             break;
           case STATE_ROWSTREAMING:
-            if (cur_query.abort)
-              state = STATE_ABORT;
-            else {
-              status = mysql_fetch_row_cont(&cur_query.row, cur_query.result,
-                                            mysql_status(event));
-              if (status)
-                done = true;
-              else
-                state = STATE_ROWSTREAMED;
-            }
+            status = mysql_fetch_row_cont(&cur_query.row,
+                                          cur_query.result,
+                                          mysql_status(event));
+            if (status)
+              done = true;
+            else
+              state = STATE_ROWSTREAMED;
             break;
           case STATE_ROWSTREAMED:
             if (cur_query.abort)
