@@ -36,6 +36,7 @@ static Persistent<String> cfg_timeout_symbol;
 static Persistent<String> cfg_secauth_symbol;
 static Persistent<String> cfg_multi_symbol;
 static Persistent<String> cfg_compress_symbol;
+static Persistent<String> cfg_metadata_symbol;
 static Persistent<String> cfg_ssl_symbol;
 static Persistent<String> cfg_ssl_key_symbol;
 static Persistent<String> cfg_ssl_cert_symbol;
@@ -99,6 +100,7 @@ struct sql_config {
   char *socket;
   unsigned int port;
   unsigned long client_opts;
+  bool metadata;
 
   // ssl
   char *ssl_key;
@@ -188,6 +190,7 @@ class Client : public ObjectWrap {
       config.db = NULL;
       config.socket = NULL;
       config.client_opts = CLIENT_MULTI_RESULTS | CLIENT_REMEMBER_OPTIONS;
+      config.metadata = false;
       config.ssl_key = NULL;
       config.ssl_cert = NULL;
       config.ssl_ca = NULL;
@@ -647,13 +650,19 @@ class Client : public ObjectWrap {
       uint16_t *new_buf;
       unsigned long *lengths;
       Handle<Value> field_value;
-      Local<Object> row;
+      Local<Object> row, metadata, types, charsetNrs;
+
       if (n_fields == 0)
         return;
       lengths = mysql_fetch_lengths(cur_query.result);
       fields = mysql_fetch_fields(cur_query.result);
-      if (cur_query.use_array)
+      if (cur_query.use_array) {
         row = Array::New(n_fields);
+        if (config.metadata) {
+          types = Array::New(n_fields);
+          charsetNrs = Array::New(n_fields);
+        }
+      }
       else {
         if (!cur_query.column_names) {
           cur_query.column_names =
@@ -667,6 +676,10 @@ class Client : public ObjectWrap {
           }
         }
         row = Object::New();
+        if (config.metadata) {
+          types = Object::New();
+          charsetNrs = Object::New();
+        }
       }
       for (f = 0; f < n_fields; ++f) {
         if (cur_query.row[f] == NULL)
@@ -686,12 +699,71 @@ class Client : public ObjectWrap {
           row->Set(f, field_value);
         else
           row->Set(cur_query.column_names[f], field_value);
+
+        if (config.metadata) {
+          field = fields[f];
+          if (cur_query.use_array) {
+            types->Set(f, String::New(FieldTypeToString(field.type)));
+            charsetNrs->Set(f, Integer::NewFromUnsigned(field.charsetnr));
+          }
+          else {
+            types->Set(cur_query.column_names[f], String::New(FieldTypeToString(field.type)));   
+            charsetNrs->Set(cur_query.column_names[f], Integer::NewFromUnsigned(field.charsetnr));
+          }
+        }
       }
-      Handle<Value> emit_argv[2] = { qrow_symbol, row };
+      
       TryCatch try_catch;
-      Emit->Call(handle_, 2, emit_argv);
+      if (config.metadata) {
+        metadata = Object::New();
+        metadata->Set(String::New("types"), types);
+        metadata->Set(String::New("charsetNrs"), charsetNrs);
+
+        Handle<Value> emit_argv[3] = { qrow_symbol, row, metadata };
+        Emit->Call(handle_, 3, emit_argv);
+      } else {
+        Handle<Value> emit_argv[2] = { qrow_symbol, row };
+        Emit->Call(handle_, 2, emit_argv);
+      }
+      
       if (try_catch.HasCaught())
         FatalException(try_catch);
+    }
+
+    inline const char* FieldTypeToString(enum_field_types v)
+    {
+        // http://dev.mysql.com/doc/refman/5.7/en/c-api-data-structures.html
+        switch (v)
+        {
+            case MYSQL_TYPE_TINY:       return "TINYINT";
+            case MYSQL_TYPE_SHORT:      return "SMALLINT";
+            case MYSQL_TYPE_LONG:       return "INTEGER";
+            case MYSQL_TYPE_INT24:      return "MEDIUMINT";
+            case MYSQL_TYPE_LONGLONG:   return "BIGINT";
+            case MYSQL_TYPE_DECIMAL:
+            case MYSQL_TYPE_NEWDECIMAL: return "DECIMAL";
+            case MYSQL_TYPE_FLOAT:      return "FLOAT";
+            case MYSQL_TYPE_DOUBLE:     return "DOUBLE";
+            case MYSQL_TYPE_BIT:        return "BIT";
+            case MYSQL_TYPE_TIMESTAMP:  return "TIMESTAMP";
+            case MYSQL_TYPE_DATE:
+            case MYSQL_TYPE_NEWDATE:    return "DATE";
+            case MYSQL_TYPE_TIME:       return "TIME";
+            case MYSQL_TYPE_DATETIME:   return "DATETIME";
+            case MYSQL_TYPE_YEAR:       return "YEAR";
+            case MYSQL_TYPE_STRING:     return "CHAR";
+            case MYSQL_TYPE_VAR_STRING:
+            case MYSQL_TYPE_VARCHAR:    return "VARCHAR";
+            case MYSQL_TYPE_BLOB:       return "BLOB";
+            case MYSQL_TYPE_TINY_BLOB:  return "TINYBLOB";
+            case MYSQL_TYPE_MEDIUM_BLOB:return "MEDIUMBLOB";
+            case MYSQL_TYPE_LONG_BLOB:  return "LONGBLOB";
+            case MYSQL_TYPE_SET:        return "SET";
+            case MYSQL_TYPE_ENUM:       return "ENUM";
+            case MYSQL_TYPE_GEOMETRY:   return "GEOMETRY";
+            case MYSQL_TYPE_NULL:       return "NULL";
+            default:                    return "[Unknown field type]";
+        }
     }
 
     static Handle<Value> New(const Arguments& args) {
@@ -764,6 +836,7 @@ class Client : public ObjectWrap {
       Local<Value> multi_v = cfg->Get(cfg_multi_symbol);
       Local<Value> compress_v = cfg->Get(cfg_compress_symbol);
       Local<Value> ssl_v = cfg->Get(cfg_ssl_symbol);
+      Local<Value> metadata_v = cfg->Get(cfg_metadata_symbol);
 
       if (!user_v->IsString() || user_v->ToString()->Length() == 0)
         obj->config.user = NULL;
@@ -819,6 +892,9 @@ class Client : public ObjectWrap {
 
       if (compress_v->IsBoolean() && compress_v->BooleanValue())
         mysql_options(&obj->mysql, MYSQL_OPT_COMPRESS, 0);
+
+      if (metadata_v->IsBoolean() && metadata_v->BooleanValue())
+        obj->config.metadata = true;
 
       if (ssl_v->IsObject() || ssl_v->IsBoolean()) {
         if (ssl_v->IsBoolean() && ssl_v->BooleanValue())
@@ -965,6 +1041,7 @@ class Client : public ObjectWrap {
       cfg_secauth_symbol = NODE_PSYMBOL("secureAuth");
       cfg_multi_symbol = NODE_PSYMBOL("multiStatements");
       cfg_compress_symbol = NODE_PSYMBOL("compress");
+      cfg_metadata_symbol = NODE_PSYMBOL("metadata");
       cfg_ssl_symbol = NODE_PSYMBOL("ssl");
       cfg_ssl_key_symbol = NODE_PSYMBOL("key");
       cfg_ssl_cert_symbol = NODE_PSYMBOL("cert");
