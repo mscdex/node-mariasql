@@ -984,6 +984,7 @@ class Client : public ObjectWrap {
         );
       }
       obj->close();
+      obj->Unref();
       return Undefined();
     }
 
