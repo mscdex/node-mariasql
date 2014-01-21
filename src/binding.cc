@@ -650,7 +650,7 @@ class Client : public ObjectWrap {
       uint16_t *new_buf;
       unsigned long *lengths;
       Handle<Value> field_value;
-      Local<Object> row, metadata, types, charsetNrs;
+      Local<Object> row, metadata, types, charsetNrs, dbs, tables, orgTables, names, orgNames;
 
       if (n_fields == 0)
         return;
@@ -661,6 +661,11 @@ class Client : public ObjectWrap {
         if (config.metadata) {
           types = Array::New(n_fields);
           charsetNrs = Array::New(n_fields);
+          dbs = Array::New(n_fields);
+          tables = Array::New(n_fields);
+          orgTables = Array::New(n_fields);
+          names = Array::New(n_fields);
+          orgNames = Array::New(n_fields);
         }
       }
       else {
@@ -679,6 +684,11 @@ class Client : public ObjectWrap {
         if (config.metadata) {
           types = Object::New();
           charsetNrs = Object::New();
+          dbs = Object::New();
+          tables = Object::New();
+          orgTables = Object::New();
+          names = Object::New();
+          orgNames = Object::New();
         }
       }
       for (f = 0; f < n_fields; ++f) {
@@ -704,20 +714,35 @@ class Client : public ObjectWrap {
           field = fields[f];
           if (cur_query.use_array) {
             types->Set(f, String::New(FieldTypeToString(field.type)));
-            charsetNrs->Set(f, Integer::NewFromUnsigned(field.charsetnr));
+            charsetNrs->Set(f, Integer::NewFromUnsigned(field.charsetnr));            
+            dbs->Set(f, String::New(field.db));
+            tables->Set(f, String::New(field.table));
+            orgTables->Set(f, String::New(field.org_table));
+            names->Set(f, String::New(field.name));
+            orgNames->Set(f, String::New(field.org_name));
           }
           else {
-            types->Set(cur_query.column_names[f], String::New(FieldTypeToString(field.type)));   
-            charsetNrs->Set(cur_query.column_names[f], Integer::NewFromUnsigned(field.charsetnr));
+            types->Set(cur_query.column_names[f], String::New(FieldTypeToString(field.type)));
+            charsetNrs->Set(cur_query.column_names[f], Integer::NewFromUnsigned(field.charsetnr));            
+            dbs->Set(cur_query.column_names[f], String::New(field.db));
+            tables->Set(cur_query.column_names[f], String::New(field.table));
+            orgTables->Set(cur_query.column_names[f], String::New(field.org_table));
+            names->Set(cur_query.column_names[f], String::New(field.name));
+            orgNames->Set(cur_query.column_names[f], String::New(field.org_name));
           }
         }
       }
-      
+
       TryCatch try_catch;
       if (config.metadata) {
         metadata = Object::New();
         metadata->Set(String::New("types"), types);
         metadata->Set(String::New("charsetNrs"), charsetNrs);
+        metadata->Set(String::New("dbs"), dbs);
+        metadata->Set(String::New("tables"), tables);
+        metadata->Set(String::New("orgTables"), orgTables);
+        metadata->Set(String::New("names"), names);
+        metadata->Set(String::New("orgNames"), orgNames);
 
         Handle<Value> emit_argv[3] = { qrow_symbol, row, metadata };
         Emit->Call(handle_, 3, emit_argv);
@@ -725,7 +750,7 @@ class Client : public ObjectWrap {
         Handle<Value> emit_argv[2] = { qrow_symbol, row };
         Emit->Call(handle_, 2, emit_argv);
       }
-      
+
       if (try_catch.HasCaught())
         FatalException(try_catch);
     }
