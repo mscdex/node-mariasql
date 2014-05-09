@@ -44,6 +44,7 @@ static Persistent<String> cfg_ssl_ca_symbol;
 static Persistent<String> cfg_ssl_capath_symbol;
 static Persistent<String> cfg_ssl_cipher_symbol;
 static Persistent<String> cfg_ssl_reject_symbol;
+static Persistent<String> cfg_local_infile_symbol;
 
 const int STATE_NULL = -100,
           STATE_CLOSE = -2,
@@ -862,6 +863,7 @@ class Client : public ObjectWrap {
       Local<Value> compress_v = cfg->Get(cfg_compress_symbol);
       Local<Value> ssl_v = cfg->Get(cfg_ssl_symbol);
       Local<Value> metadata_v = cfg->Get(cfg_metadata_symbol);
+      Local<Value> local_infile_v = cfg->Get(cfg_local_infile_symbol);
 
       if (!user_v->IsString() || user_v->ToString()->Length() == 0)
         obj->config.user = NULL;
@@ -905,6 +907,10 @@ class Client : public ObjectWrap {
       if (timeout_v->IsUint32() && timeout_v->Uint32Value() > 0)
         timeout = timeout_v->Uint32Value();
       mysql_options(&obj->mysql, MYSQL_OPT_CONNECT_TIMEOUT, &timeout);
+
+      if (local_infile_v->IsBoolean() && local_infile_v->BooleanValue()){
+        mysql_options(&obj->mysql, MYSQL_OPT_LOCAL_INFILE, &MY_BOOL_TRUE);
+      }
 
       if (!secauth_v->IsBoolean()
           || (secauth_v->IsBoolean() && secauth_v->BooleanValue()))
@@ -1075,6 +1081,7 @@ class Client : public ObjectWrap {
       cfg_ssl_capath_symbol = NODE_PSYMBOL("capath");
       cfg_ssl_cipher_symbol = NODE_PSYMBOL("cipher");
       cfg_ssl_reject_symbol = NODE_PSYMBOL("rejectUnauthorized");
+      cfg_local_infile_symbol = NODE_PSYMBOL("local_infile");
 
       target->Set(name, Client_constructor->GetFunction());
     }
