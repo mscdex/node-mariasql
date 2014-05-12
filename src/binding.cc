@@ -917,13 +917,11 @@ class Client : public ObjectWrap {
       }
 
       if (default_file_v->IsString() && default_file_v->ToString()->Length() > 0) {
-        String::Utf8Value default_file_s(default_file_v);
-        mysql_options(&obj->mysql, MYSQL_READ_DEFAULT_FILE, strdup(*default_file_s));
+        mysql_options(&obj->mysql, MYSQL_READ_DEFAULT_FILE, *String::Utf8Value(default_file_v));
       } 
 
       if (default_group_v->IsString() && default_group_v->ToString()->Length() > 0) {
-        String::Utf8Value default_group_s(default_group_v);
-        mysql_options(&obj->mysql, MYSQL_READ_DEFAULT_GROUP, strdup(*default_group_s));
+        mysql_options(&obj->mysql, MYSQL_READ_DEFAULT_GROUP, *String::Utf8Value(default_group_v));
       }  
 
       if (!secauth_v->IsBoolean()
