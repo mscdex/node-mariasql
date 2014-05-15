@@ -45,6 +45,7 @@ static Persistent<String> cfg_ssl_capath_symbol;
 static Persistent<String> cfg_ssl_cipher_symbol;
 static Persistent<String> cfg_ssl_reject_symbol;
 static Persistent<String> cfg_local_infile_symbol;
+static Persistent<String> cfg_charset_symbol;
 
 const int STATE_NULL = -100,
           STATE_CLOSE = -2,
@@ -109,6 +110,7 @@ struct sql_config {
   char *ssl_ca;
   char *ssl_capath;
   char *ssl_cipher;
+  char *charset;
 };
 
 struct sql_query {
@@ -197,6 +199,7 @@ class Client : public ObjectWrap {
       config.ssl_ca = NULL;
       config.ssl_capath = NULL;
       config.ssl_cipher = NULL;
+      config.charset = NULL;
       had_error = destructing = false;
       deferred_state = STATE_NULL;
       poll_handle = NULL;
@@ -231,6 +234,7 @@ class Client : public ObjectWrap {
       FREE(config.ssl_ca);
       FREE(config.ssl_capath);
       FREE(config.ssl_cipher);
+      FREE(config.charset);
 
       FREE(cur_query.result);
       FREE_PERSISTARRAY(cur_query.column_names, String);
@@ -864,7 +868,8 @@ class Client : public ObjectWrap {
       Local<Value> ssl_v = cfg->Get(cfg_ssl_symbol);
       Local<Value> metadata_v = cfg->Get(cfg_metadata_symbol);
       Local<Value> local_infile_v = cfg->Get(cfg_local_infile_symbol);
-
+      Local<Value> charset_v = cfg->Get(cfg_charset_symbol);
+      
       if (!user_v->IsString() || user_v->ToString()->Length() == 0)
         obj->config.user = NULL;
       else {
@@ -968,7 +973,11 @@ class Client : public ObjectWrap {
                       obj->config.ssl_capath,
                       obj->config.ssl_cipher);
       }
-
+      if (charset_v->IsString() && charset_v->ToString()->Length() > 0) {
+        obj->config.charset = strdup(*(String::Utf8Value(charset_v)));
+        mysql_options(&obj->mysql, MYSQL_SET_CHARSET_NAME, obj->config.charset); 
+      }
+      
       obj->connect();
 
       return Undefined();
@@ -1082,6 +1091,7 @@ class Client : public ObjectWrap {
       cfg_ssl_cipher_symbol = NODE_PSYMBOL("cipher");
       cfg_ssl_reject_symbol = NODE_PSYMBOL("rejectUnauthorized");
       cfg_local_infile_symbol = NODE_PSYMBOL("local_infile");
+      cfg_charset_symbol = NODE_PSYMBOL("charset");
 
       target->Set(name, Client_constructor->GetFunction());
     }
