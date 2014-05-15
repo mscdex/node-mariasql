@@ -310,10 +310,10 @@ Client methods
         
     * **local_infile** - < _boolean_ > - If true, will set "local-infile" for the client. **Default:** (none)
     
-    * **charset** - < _string_ > - Set the connection charset **Default** utf8
-    
-        > **NOTE:** the server needs to have its own local-infile = 1 under the [mysql] and/or [mysqld] sections of my.cnf
+       > **NOTE:** the server needs to have its own local-infile = 1 under the [mysql] and/or [mysqld] sections of my.cnf
 
+    * **charset** - < _string_ > - Set the connection charset **Default** utf8
+ 
 * **query**(< _string_ >query[, < _mixed_ >values[, < _boolean_ >useArray=false]]) - < _Results_ > - Enqueues the given `query` and returns a _Results_ object. `values` can be an object or array containing values to be used when replacing placeholders in `query` (see prepare()). If `useArray` is set to true, then an array of field values are returned instead of an object of fieldName=>fieldValue pairs. (Note: using arrays performs much faster)
 
 * **prepare**(< _string_ >query) - < _function_ > - Generates a re-usable function for `query` when it contains placeholders (can be simple `?` position-based or named `:foo_bar1` placeholders or any combination of the two). In the case that the function does contain placeholders, the generated function is cached per-connection if it is not already in the cache (currently the cache will hold at most **30** prepared queries). The returned function takes an object or array and returns the query with the placeholders replaced by the values in the object or array. **Note:** Every value is converted to a (utf8) string when filling the placeholders.
