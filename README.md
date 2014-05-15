@@ -309,7 +309,9 @@ Client methods
         * **rejectUnauthorized** - < _boolean_ > - If true, the connection will be rejected if the Common Name value does not match that of the host name. **Default:** false
         
     * **local_infile** - < _boolean_ > - If true, will set "local-infile" for the client. **Default:** (none)
-        
+    
+    * **charset** - < _string_ > - Set the connection charset **Default** utf8
+    
         > **NOTE:** the server needs to have its own local-infile = 1 under the [mysql] and/or [mysqld] sections of my.cnf
 
 * **query**(< _string_ >query[, < _mixed_ >values[, < _boolean_ >useArray=false]]) - < _Results_ > - Enqueues the given `query` and returns a _Results_ object. `values` can be an object or array containing values to be used when replacing placeholders in `query` (see prepare()). If `useArray` is set to true, then an array of field values are returned instead of an object of fieldName=>fieldValue pairs. (Note: using arrays performs much faster)
