@@ -309,7 +309,9 @@ Client methods
         * **rejectUnauthorized** - < _boolean_ > - If true, the connection will be rejected if the Common Name value does not match that of the host name. **Default:** false
         
     * **local_infile** - < _boolean_ > - If true, will set "local-infile" for the client. **Default:** (none)
-        
+    
+    * **charset** - < _string_ > - Set the connection charset **Default** utf8
+    
         > **NOTE:** the server needs to have its own local-infile = 1 under the [mysql] and/or [mysqld] sections of my.cnf
         
     * **read_default_file** - < _string_ > - Provide a path to the my.cnf configuration file to be used by the client. Sets MYSQL_READ_DEFAULT_FILE option in the C client.  **Default:** (none)
