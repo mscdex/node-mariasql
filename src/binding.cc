@@ -115,6 +115,7 @@ struct sql_query {
   MYSQL_RES *result;
   MYSQL_ROW row;
   Persistent<String> *column_names;
+  unsigned int column_count;
   int err;
   char *str;
   bool use_array;
@@ -146,10 +147,9 @@ const my_bool MY_BOOL_TRUE = 1,
 
 #define FREE(p) if (p) { free(p); p = NULL; }
 #define FREE_PERSIST(h) if (!h.IsEmpty()) { h.Dispose(); h.Clear(); }
-#define FREE_PERSISTARRAY(a,t) \
+#define FREE_PERSISTARRAY(a,len) \
           if (a) {                                                            \
-            for (unsigned int i = 0, len = sizeof(a) / sizeof(Persistent<t>); \
-                 i < len; ++i)                                                \
+            for (unsigned int i = 0; i < len; ++i)                            \
               FREE_PERSIST(a[i]);                                             \
             FREE(a);                                                          \
             a = NULL;                                                         \
@@ -203,6 +203,7 @@ class Client : public ObjectWrap {
 
       cur_query.result = NULL;
       cur_query.column_names = NULL;
+      cur_query.column_count = 0;
       cur_query.err = 0;
       cur_query.str = NULL;
       cur_query.use_array = false;
@@ -233,7 +234,8 @@ class Client : public ObjectWrap {
       FREE(config.ssl_cipher);
 
       FREE(cur_query.result);
-      FREE_PERSISTARRAY(cur_query.column_names, String);
+      FREE_PERSISTARRAY(cur_query.column_names, cur_query.column_count);
+      cur_query.column_count = 0;
       cur_query.err = 0;
       FREE(cur_query.str);
       cur_query.use_array = false;
@@ -440,7 +442,7 @@ class Client : public ObjectWrap {
                 mysql_free_result(cur_query.result);
                 cur_query.result = NULL;
                 state = STATE_NEXTQUERY;
-                FREE_PERSISTARRAY(cur_query.column_names, String);
+                FREE_PERSISTARRAY(cur_query.column_names, cur_query.column_count);
                 emit_done(insert_id, affected_rows, num_rows);
               }
             }
@@ -537,7 +539,7 @@ class Client : public ObjectWrap {
           case STATE_RESULTFREED:
             state = STATE_CONNECTED;
             cur_query.result = NULL;
-            FREE_PERSISTARRAY(cur_query.column_names, String);
+            FREE_PERSISTARRAY(cur_query.column_names, cur_query.column_count);
             if (deferred_state != STATE_NULL) {
               state = deferred_state;
               deferred_state = STATE_NULL;
@@ -673,6 +675,7 @@ class Client : public ObjectWrap {
         if (!cur_query.column_names) {
           cur_query.column_names =
             (Persistent<String>*) malloc(sizeof(Persistent<String>) * n_fields);
+          cur_query.column_count = n_fields;
           for (f = 0; f < n_fields; ++f) {
             field = fields[f];
             cur_query.column_names[f] = Persistent<String>::New(
