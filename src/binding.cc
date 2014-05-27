@@ -45,6 +45,8 @@ static Persistent<String> cfg_ssl_capath_symbol;
 static Persistent<String> cfg_ssl_cipher_symbol;
 static Persistent<String> cfg_ssl_reject_symbol;
 static Persistent<String> cfg_local_infile_symbol;
+static Persistent<String> cfg_read_default_file;
+static Persistent<String> cfg_read_default_group;
 
 const int STATE_NULL = -100,
           STATE_CLOSE = -2,
@@ -867,6 +869,8 @@ class Client : public ObjectWrap {
       Local<Value> ssl_v = cfg->Get(cfg_ssl_symbol);
       Local<Value> metadata_v = cfg->Get(cfg_metadata_symbol);
       Local<Value> local_infile_v = cfg->Get(cfg_local_infile_symbol);
+      Local<Value> default_file_v = cfg->Get(cfg_read_default_file);
+      Local<Value> default_group_v = cfg->Get(cfg_read_default_group);
 
       if (!user_v->IsString() || user_v->ToString()->Length() == 0)
         obj->config.user = NULL;
@@ -914,6 +918,14 @@ class Client : public ObjectWrap {
       if (local_infile_v->IsBoolean() && local_infile_v->BooleanValue()){
         mysql_options(&obj->mysql, MYSQL_OPT_LOCAL_INFILE, &MY_BOOL_TRUE);
       }
+
+      if (default_file_v->IsString() && default_file_v->ToString()->Length() > 0) {
+        mysql_options(&obj->mysql, MYSQL_READ_DEFAULT_FILE, *String::Utf8Value(default_file_v));
+      } 
+
+      if (default_group_v->IsString() && default_group_v->ToString()->Length() > 0) {
+        mysql_options(&obj->mysql, MYSQL_READ_DEFAULT_GROUP, *String::Utf8Value(default_group_v));
+      }  
 
       if (!secauth_v->IsBoolean()
           || (secauth_v->IsBoolean() && secauth_v->BooleanValue()))
@@ -1085,6 +1097,9 @@ class Client : public ObjectWrap {
       cfg_ssl_cipher_symbol = NODE_PSYMBOL("cipher");
       cfg_ssl_reject_symbol = NODE_PSYMBOL("rejectUnauthorized");
       cfg_local_infile_symbol = NODE_PSYMBOL("local_infile");
+      cfg_read_default_file = NODE_PSYMBOL("read_default_file");
+      cfg_read_default_group = NODE_PSYMBOL("read_default_group");
+
 
       target->Set(name, Client_constructor->GetFunction());
     }

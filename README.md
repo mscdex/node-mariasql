@@ -311,6 +311,12 @@ Client methods
     * **local_infile** - < _boolean_ > - If true, will set "local-infile" for the client. **Default:** (none)
         
         > **NOTE:** the server needs to have its own local-infile = 1 under the [mysql] and/or [mysqld] sections of my.cnf
+        
+    * **read_default_file** - < _string_ > - Provide a path to the my.cnf configuration file to be used by the client. Sets MYSQL_READ_DEFAULT_FILE option in the C client.  **Default:** (none)
+        
+        > **FROM MAN PAGE:** These options can be used to read a config file like /etc/my.cnf or ~/.my.cnf. By default MySQL's C client library doesn't use any config files unlike the client programs (mysql, mysqladmin, ...) that do, but outside of the C client library. Thus you need to explicitly request reading a config file...
+        
+    * **read_default_group** - < _string_ > - Provide the name of the group to be read in the my.cnf configuration file without the square brackets e.g. "client" for section [client] in my.cnf.  If not set but "read_default_file" is set, the client tries to read from these groups: [client] or [client-server] or [client-mariadb]. Sets MYSQL_READ_DEFAULT_GROUP option in the C client.  **Default:** (none)        
 
 * **query**(< _string_ >query[, < _mixed_ >values[, < _boolean_ >useArray=false]]) - < _Results_ > - Enqueues the given `query` and returns a _Results_ object. `values` can be an object or array containing values to be used when replacing placeholders in `query` (see prepare()). If `useArray` is set to true, then an array of field values are returned instead of an object of fieldName=>fieldValue pairs. (Note: using arrays performs much faster)
 
