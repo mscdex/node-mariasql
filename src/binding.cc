@@ -115,7 +115,7 @@ struct sql_query {
   MYSQL_RES *result;
   MYSQL_ROW row;
   Persistent<String> *column_names;
-  int column_count;
+  unsigned int column_count;
   int err;
   char *str;
   bool use_array;
