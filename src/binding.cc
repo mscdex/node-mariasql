@@ -47,6 +47,7 @@ static Persistent<String> cfg_ssl_reject_symbol;
 static Persistent<String> cfg_local_infile_symbol;
 static Persistent<String> cfg_read_default_file;
 static Persistent<String> cfg_read_default_group;
+static Persistent<String> cfg_charset_symbol;
 
 const int STATE_NULL = -100,
           STATE_CLOSE = -2,
@@ -111,6 +112,7 @@ struct sql_config {
   char *ssl_ca;
   char *ssl_capath;
   char *ssl_cipher;
+  char *charset;
 };
 
 struct sql_query {
@@ -199,6 +201,7 @@ class Client : public ObjectWrap {
       config.ssl_ca = NULL;
       config.ssl_capath = NULL;
       config.ssl_cipher = NULL;
+      config.charset = NULL;
       had_error = destructing = false;
       deferred_state = STATE_NULL;
       poll_handle = NULL;
@@ -234,6 +237,7 @@ class Client : public ObjectWrap {
       FREE(config.ssl_ca);
       FREE(config.ssl_capath);
       FREE(config.ssl_cipher);
+      FREE(config.charset);
 
       FREE(cur_query.result);
       FREE_PERSISTARRAY(cur_query.column_names, cur_query.column_count);
@@ -871,7 +875,8 @@ class Client : public ObjectWrap {
       Local<Value> local_infile_v = cfg->Get(cfg_local_infile_symbol);
       Local<Value> default_file_v = cfg->Get(cfg_read_default_file);
       Local<Value> default_group_v = cfg->Get(cfg_read_default_group);
-
+      Local<Value> charset_v = cfg->Get(cfg_charset_symbol);
+      
       if (!user_v->IsString() || user_v->ToString()->Length() == 0)
         obj->config.user = NULL;
       else {
@@ -983,7 +988,11 @@ class Client : public ObjectWrap {
                       obj->config.ssl_capath,
                       obj->config.ssl_cipher);
       }
-
+      if (charset_v->IsString() && charset_v->ToString()->Length() > 0) {
+        obj->config.charset = strdup(*(String::Utf8Value(charset_v)));
+        mysql_options(&obj->mysql, MYSQL_SET_CHARSET_NAME, obj->config.charset); 
+      }
+      
       obj->connect();
 
       return Undefined();
@@ -1099,7 +1108,7 @@ class Client : public ObjectWrap {
       cfg_local_infile_symbol = NODE_PSYMBOL("local_infile");
       cfg_read_default_file = NODE_PSYMBOL("read_default_file");
       cfg_read_default_group = NODE_PSYMBOL("read_default_group");
-
+      cfg_charset_symbol = NODE_PSYMBOL("charset");
 
       target->Set(name, Client_constructor->GetFunction());
     }
