@@ -294,6 +294,8 @@ Client methods
 
     * **compress** - < _boolean_ > - Use connection compression? **Default:** false
 
+    * **metadata** - < _boolean_ > - If true, metadata contains MySQL field information applied primarily for columns of query result sets such as those produced by SELECT statements. **Default:** false
+
     * **ssl** - < _mixed_ > - If boolean true, defaults listed below and default ciphers will be used, otherwise it must be an object with any of the following valid properties: **Default:** false
 
         * **key** - < _string_ > - Path to a client private key file in PEM format (if the key requires a passphrase and libmysqlclient was built with yaSSL (bundled Windows libraries are), an error will occur). **Default:** (none)
@@ -366,7 +368,7 @@ Query events
 
 * **error**(< _Error_ >err) - An error occurred while executing this query (the 'end' event will not be emitted).
 
-* **end**(< _object_ >info) - The query finished _successfully_. `info` contains statistics such as 'affectedRows', 'insertId', and 'numRows.'
+* **end**(< _object_ >info, < _object_ >metadata) - The query finished _successfully_. `info` contains statistics such as 'affectedRows', 'insertId', and 'numRows'. `metadata` contains fields information about 'types', 'charsetNrs', 'dbs', 'tables', 'orgTables', 'names', 'orgNames' for each column.
 
 
 Query methods

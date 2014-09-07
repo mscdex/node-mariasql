@@ -445,11 +445,11 @@ class Client : public ObjectWrap {
                 my_ulonglong insert_id = mysql_insert_id(&mysql),
                              affected_rows = mysql_affected_rows(&mysql),
                              num_rows = mysql_num_rows(cur_query.result);
+                emit_done(insert_id, affected_rows, num_rows);
                 mysql_free_result(cur_query.result);
                 cur_query.result = NULL;
                 state = STATE_NEXTQUERY;
                 FREE_PERSISTARRAY(cur_query.column_names, cur_query.column_count);
-                emit_done(insert_id, affected_rows, num_rows);
               }
             }
             break;
@@ -643,11 +643,110 @@ class Client : public ObjectWrap {
                              ? 0
                              : affected_rows));
       info->Set(num_rows_symbol, Number::New(num_rows));
-      Handle<Value> emit_argv[2] = { qdone_symbol, info };
-      TryCatch try_catch;
-      Emit->Call(handle_, 2, emit_argv);
-      if (try_catch.HasCaught())
-        FatalException(try_catch);
+
+      unsigned int n_fields;
+
+      if (cur_query.result) {
+        n_fields = mysql_num_fields(cur_query.result);
+      }
+      else {
+        n_fields = mysql_field_count(&mysql);
+      }
+
+      if (n_fields != 0) {
+        MYSQL_FIELD field, *fields;
+        unsigned int f = 0;
+        Local<Object> metadata, types, charsetNrs, dbs, tables, orgTables, names, orgNames;
+
+        fields = mysql_fetch_fields(cur_query.result);
+
+        if (cur_query.use_array) {
+          if (config.metadata) {
+            types = Array::New(n_fields);
+            charsetNrs = Array::New(n_fields);
+            dbs = Array::New(n_fields);
+            tables = Array::New(n_fields);
+            orgTables = Array::New(n_fields);
+            names = Array::New(n_fields);
+            orgNames = Array::New(n_fields);
+          }
+        }
+        else {
+          if (!cur_query.column_names) {
+            cur_query.column_names =
+              (Persistent<String>*) malloc(sizeof(Persistent<String>) * n_fields);
+            for (f = 0; f < n_fields; ++f) {
+              field = fields[f];
+              cur_query.column_names[f] = Persistent<String>::New(
+                                              String::New(field.name,
+                                                          field.name_length)
+                                          );
+            }
+          }
+          if (config.metadata) {
+            types = Object::New();
+            charsetNrs = Object::New();
+            dbs = Object::New();
+            tables = Object::New();
+            orgTables = Object::New();
+            names = Object::New();
+            orgNames = Object::New();
+          }
+        }
+
+        for (f = 0; f < n_fields; ++f) {
+          if (config.metadata) {
+            field = fields[f];
+            if (cur_query.use_array) {
+              types->Set(f, String::New(FieldTypeToString(field.type)));
+              charsetNrs->Set(f, Integer::NewFromUnsigned(field.charsetnr));
+              dbs->Set(f, String::New(field.db));
+              tables->Set(f, String::New(field.table));
+              orgTables->Set(f, String::New(field.org_table));
+              names->Set(f, String::New(field.name));
+              orgNames->Set(f, String::New(field.org_name));
+            }
+            else {
+              types->Set(cur_query.column_names[f], String::New(FieldTypeToString(field.type)));
+              charsetNrs->Set(cur_query.column_names[f], Integer::NewFromUnsigned(field.charsetnr));
+              dbs->Set(cur_query.column_names[f], String::New(field.db));
+              tables->Set(cur_query.column_names[f], String::New(field.table));
+              orgTables->Set(cur_query.column_names[f], String::New(field.org_table));
+              names->Set(cur_query.column_names[f], String::New(field.name));
+              orgNames->Set(cur_query.column_names[f], String::New(field.org_name));
+            }
+          }
+        }
+
+        TryCatch try_catch;
+
+        if (config.metadata) {
+          metadata = Object::New();
+          metadata->Set(String::New("types"), types);
+          metadata->Set(String::New("charsetNrs"), charsetNrs);
+          metadata->Set(String::New("dbs"), dbs);
+          metadata->Set(String::New("tables"), tables);
+          metadata->Set(String::New("orgTables"), orgTables);
+          metadata->Set(String::New("names"), names);
+          metadata->Set(String::New("orgNames"), orgNames);
+
+          Handle<Value> emit_argv[3] = { qdone_symbol, info, metadata };
+          Emit->Call(handle_, 3, emit_argv);
+        } else {
+          Handle<Value> emit_argv[2] = { qdone_symbol, info };
+          Emit->Call(handle_, 2, emit_argv);
+        }
+
+        if (try_catch.HasCaught())
+          FatalException(try_catch);
+      }
+      else {
+        Handle<Value> emit_argv[2] = { qdone_symbol, info };
+        TryCatch try_catch;
+        Emit->Call(handle_, 2, emit_argv);
+        if (try_catch.HasCaught())
+          FatalException(try_catch);
+      }
     }
 
     void emit_row() {
@@ -724,7 +823,7 @@ class Client : public ObjectWrap {
           field = fields[f];
           if (cur_query.use_array) {
             types->Set(f, String::New(FieldTypeToString(field.type)));
-            charsetNrs->Set(f, Integer::NewFromUnsigned(field.charsetnr));            
+            charsetNrs->Set(f, Integer::NewFromUnsigned(field.charsetnr));
             dbs->Set(f, String::New(field.db));
             tables->Set(f, String::New(field.table));
             orgTables->Set(f, String::New(field.org_table));
@@ -733,7 +832,7 @@ class Client : public ObjectWrap {
           }
           else {
             types->Set(cur_query.column_names[f], String::New(FieldTypeToString(field.type)));
-            charsetNrs->Set(cur_query.column_names[f], Integer::NewFromUnsigned(field.charsetnr));            
+            charsetNrs->Set(cur_query.column_names[f], Integer::NewFromUnsigned(field.charsetnr));
             dbs->Set(cur_query.column_names[f], String::New(field.db));
             tables->Set(cur_query.column_names[f], String::New(field.table));
             orgTables->Set(cur_query.column_names[f], String::New(field.org_table));
