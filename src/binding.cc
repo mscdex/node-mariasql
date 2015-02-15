@@ -1,53 +1,17 @@
 #include <node.h>
 #include <node_buffer.h>
+#include <node_object_wrap.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <string>
 #include <mysql.h>
+#include <nan.h>
 
 using namespace node;
 using namespace v8;
 
 static Persistent<FunctionTemplate> Client_constructor;
-static Persistent<String> emit_symbol;
-static Persistent<String> connect_symbol;
-static Persistent<String> resquery_symbol;
-static Persistent<String> resabort_symbol;
-static Persistent<String> resdone_symbol;
-static Persistent<String> qrow_symbol;
-static Persistent<String> qrowerr_symbol;
-static Persistent<String> qerr_symbol;
-static Persistent<String> qabort_symbol;
-static Persistent<String> qdone_symbol;
-static Persistent<String> code_symbol;
-static Persistent<String> err_symbol;
-static Persistent<String> close_symbol;
-static Persistent<String> insert_id_symbol;
-static Persistent<String> affected_rows_symbol;
-static Persistent<String> num_rows_symbol;
-static Persistent<String> cfg_user_symbol;
-static Persistent<String> cfg_pwd_symbol;
-static Persistent<String> cfg_host_symbol;
-static Persistent<String> cfg_port_symbol;
-static Persistent<String> cfg_socket_symbol;
-static Persistent<String> cfg_db_symbol;
-static Persistent<String> cfg_timeout_symbol;
-static Persistent<String> cfg_secauth_symbol;
-static Persistent<String> cfg_multi_symbol;
-static Persistent<String> cfg_compress_symbol;
-static Persistent<String> cfg_metadata_symbol;
-static Persistent<String> cfg_ssl_symbol;
-static Persistent<String> cfg_ssl_key_symbol;
-static Persistent<String> cfg_ssl_cert_symbol;
-static Persistent<String> cfg_ssl_ca_symbol;
-static Persistent<String> cfg_ssl_capath_symbol;
-static Persistent<String> cfg_ssl_cipher_symbol;
-static Persistent<String> cfg_ssl_reject_symbol;
-static Persistent<String> cfg_local_infile_symbol;
-static Persistent<String> cfg_read_default_file;
-static Persistent<String> cfg_read_default_group;
-static Persistent<String> cfg_charset_symbol;
 
 const int STATE_NULL = -100,
           STATE_CLOSE = -2,
@@ -118,8 +82,6 @@ struct sql_config {
 struct sql_query {
   MYSQL_RES *result;
   MYSQL_ROW row;
-  Persistent<String> *column_names;
-  unsigned int column_count;
   int err;
   char *str;
   bool use_array;
@@ -132,6 +94,22 @@ char *conn_check_buf = (char*) malloc(1);
 
 const my_bool MY_BOOL_TRUE = 1,
               MY_BOOL_FALSE = 0;
+
+
+#define INTERNAL_1_UV_VERSION 1
+
+#if UV_VERSION_MAJOR < INTERNAL_1_UV_VERSION
+  NAN_INLINE
+    bool isPollErr(int status){
+      return status != 0 && uv_last_error(uv_default_loop()).code == UV_EBADF;
+    }
+#else
+  NAN_INLINE
+    bool isPollErr(int status){
+      return status != 0 && status == UV_EBADF;
+    }
+#endif
+             
 
 #ifdef _WIN32
 # define CHECK_CONNRESET (WSAGetLastError() == WSAECONNRESET   ||  \
@@ -150,14 +128,7 @@ const my_bool MY_BOOL_TRUE = 1,
 #define STR_ERROR_HANGUP "Disconnected from the server"
 
 #define FREE(p) if (p) { free(p); p = NULL; }
-#define FREE_PERSIST(h) if (!h.IsEmpty()) { h.Dispose(); h.Clear(); }
-#define FREE_PERSISTARRAY(a,len) \
-          if (a) {                                                            \
-            for (unsigned int i = 0; i < len; ++i)                            \
-              FREE_PERSIST(a[i]);                                             \
-            FREE(a);                                                          \
-            a = NULL;                                                         \
-          }
+
 #define IS_BINARY(f) ((f.flags & BINARY_FLAG) &&             \
                       ((f.type == MYSQL_TYPE_TINY_BLOB)   || \
                        (f.type == MYSQL_TYPE_MEDIUM_BLOB) || \
@@ -168,7 +139,7 @@ const my_bool MY_BOOL_TRUE = 1,
 
 class Client : public ObjectWrap {
   public:
-    Persistent<Function> Emit;
+    NanCallback *Emit;
     uv_poll_t *poll_handle;
     uv_os_sock_t mysql_sock;
     MYSQL mysql, *mysql_ret;
@@ -184,8 +155,7 @@ class Client : public ObjectWrap {
     ~Client() {
       destructing = true;
       close();
-      Emit.Dispose();
-      Emit.Clear();
+      delete Emit;
     }
 
     void init() {
@@ -207,8 +177,6 @@ class Client : public ObjectWrap {
       poll_handle = NULL;
 
       cur_query.result = NULL;
-      cur_query.column_names = NULL;
-      cur_query.column_count = 0;
       cur_query.err = 0;
       cur_query.str = NULL;
       cur_query.use_array = false;
@@ -240,8 +208,6 @@ class Client : public ObjectWrap {
       FREE(config.charset);
 
       FREE(cur_query.result);
-      FREE_PERSISTARRAY(cur_query.column_names, cur_query.column_count);
-      cur_query.column_count = 0;
       cur_query.err = 0;
       FREE(cur_query.str);
       cur_query.use_array = false;
@@ -265,14 +231,16 @@ class Client : public ObjectWrap {
     }
 
     static void cb_close(uv_handle_t *handle) {
-      HandleScope scope;
+      NanScope();
+
       Client *obj = (Client*) handle->data;
+
       TryCatch try_catch;
       Handle<Value> emit_argv[2] = {
-        close_symbol,
-        Local<Boolean>::New(Boolean::New(obj->had_error))
+        NanNew<String>("close"),
+        NanNew<Boolean>(obj->had_error)
       };
-      obj->Emit->Call(obj->handle_, 2, emit_argv);
+      obj->Emit->Call(NanObjectWrapHandle(obj), 2, emit_argv);
       if (try_catch.HasCaught())
         FatalException(try_catch);
       FREE(obj->poll_handle);
@@ -317,7 +285,7 @@ class Client : public ObjectWrap {
                                               config.socket,
                                               config.client_opts);
             if (!mysql_ret && mysql_errno(&mysql) > 0)
-              return emit_error(err_symbol, true);
+              return emit_error(NanNew<String>("conn.error"), true);
 
             mysql_sock = mysql_get_socket(&mysql);
 
@@ -333,7 +301,7 @@ class Client : public ObjectWrap {
               state = STATE_CONNECTING;
             } else {
               state = STATE_CONNECTED;
-              return emit(connect_symbol);
+              return emit(NanNew<String>("connect"));
             }
             break;
           case STATE_CONNECTING:
@@ -343,9 +311,9 @@ class Client : public ObjectWrap {
               done = true;
             else {
               if (!mysql_ret)
-                return emit_error(err_symbol, true);
+                return emit_error(NanNew<String>("conn.error"), true);
               state = STATE_CONNECTED;
-              return emit(connect_symbol);
+              return emit(NanNew<String>("connect"));
             }
             break;
           case STATE_CONNECTED:
@@ -367,11 +335,11 @@ class Client : public ObjectWrap {
               } else {
                 if (!cur_query.err
                     || (cur_query.err && mysql_errno(&mysql) != 2013))
-                  emit(resquery_symbol);
+                  emit(NanNew<String>("results.query"));
                 FREE(cur_query.str);
                 if (cur_query.err) {
                   state = STATE_NEXTQUERY;
-                  emit_error(qerr_symbol);
+                  emit_error(NanNew<String>("query.error"));
                 } else
                   state = STATE_QUERIED;
               }
@@ -386,11 +354,11 @@ class Client : public ObjectWrap {
             else {
               if (!cur_query.err
                   || (cur_query.err && mysql_errno(&mysql) != 2013))
-                emit(resquery_symbol);
+                emit(NanNew<String>("results.query"));
               FREE(cur_query.str);
               if (cur_query.err) {
                 state = STATE_NEXTQUERY;
-                emit_error(qerr_symbol);
+                emit_error(NanNew<String>("query.error"));
               } else
                 state = STATE_QUERIED;
             }
@@ -400,7 +368,7 @@ class Client : public ObjectWrap {
             if (!cur_query.result) {
               state = STATE_NEXTQUERY;
               if (mysql_errno(&mysql) && !cur_query.abort)
-                emit_error(qerr_symbol);
+                emit_error(NanNew<String>("query.error"));
               else if (!cur_query.abort) {
                 my_ulonglong insert_id = mysql_insert_id(&mysql),
                              affected_rows = mysql_affected_rows(&mysql);
@@ -448,7 +416,6 @@ class Client : public ObjectWrap {
                 mysql_free_result(cur_query.result);
                 cur_query.result = NULL;
                 state = STATE_NEXTQUERY;
-                FREE_PERSISTARRAY(cur_query.column_names, cur_query.column_count);
                 emit_done(insert_id, affected_rows, num_rows);
               }
             }
@@ -457,9 +424,9 @@ class Client : public ObjectWrap {
             if (!mysql_more_results(&mysql)) {
               state = STATE_CONNECTED;
               if (cur_query.abort == ABORT_RESULTS)
-                emit(resabort_symbol);
+                emit(NanNew<String>("results.abort"));
               else
-                emit(resdone_symbol);
+                emit(NanNew<String>("results.done"));
               if (cur_query.abort)
                 cur_query.abort = ABORT_NONE;
               return;
@@ -473,7 +440,7 @@ class Client : public ObjectWrap {
                 if (!cur_query.abort
                     && (!cur_query.err
                         || (cur_query.err && mysql_errno(&mysql) != 2013)))
-                  emit(resquery_symbol);
+                  emit(NanNew<String>("results.query"));
                 if (cur_query.err) {
                   state = STATE_RESULTFREE;
                   deferred_state = STATE_ROWERR;
@@ -492,7 +459,7 @@ class Client : public ObjectWrap {
                 if (!cur_query.abort
                     && (!cur_query.err
                         || (cur_query.err && mysql_errno(&mysql) != 2013)))
-                emit(resquery_symbol);
+                emit(NanNew<String>("results.query"));
               if (cur_query.err) {
                 state = STATE_RESULTFREE;
                 deferred_state = STATE_ROWERR;
@@ -508,19 +475,19 @@ class Client : public ObjectWrap {
               state = STATE_NEXTQUERY;
               if (cur_query.abort == ABORT_QUERY) {
                 cur_query.abort = ABORT_NONE;
-                emit(qabort_symbol);
+                emit(NanNew<String>("query.abort"));
               }
             }
             break;
           case STATE_QUERYERR:
             state = STATE_NEXTQUERY;
             if (!cur_query.abort)
-              emit_error(qerr_symbol);
+              emit_error(NanNew<String>("query.error"));
             break;
           case STATE_ROWERR:
             state = STATE_NEXTQUERY;
             if (!cur_query.abort)
-              emit_error(qrowerr_symbol);
+              emit_error(NanNew<String>("query.row.error"));
             break;
           case STATE_RESULTFREE:
             if (!cur_query.result)
@@ -545,7 +512,6 @@ class Client : public ObjectWrap {
           case STATE_RESULTFREED:
             state = STATE_CONNECTED;
             cur_query.result = NULL;
-            FREE_PERSISTARRAY(cur_query.column_names, cur_query.column_count);
             if (deferred_state != STATE_NULL) {
               state = deferred_state;
               deferred_state = STATE_NULL;
@@ -568,20 +534,20 @@ class Client : public ObjectWrap {
     }
 
     static void cb_poll(uv_poll_t *handle, int status, int events) {
-      HandleScope scope;
+      NanScope();
+
       Client *obj = (Client*) handle->data;
 
       // for some reason no MySQL error is set when it cannot connect on *nix,
       // so we check for the invalid FD here ...
-      if (status != 0 && uv_last_error(uv_default_loop()).code == EBADF
-          && obj->state == STATE_CONNECTING) {
+      if ( (isPollErr(status)) && obj->state == STATE_CONNECTING) {
         std::string errmsg("Can't connect to MySQL server on '");
         if (obj->config.socket)
           errmsg += obj->config.socket;
         else
           errmsg += obj->config.ip;
         errmsg += "' (0)";
-        obj->emit_error(err_symbol, true, 2003, errmsg.c_str());
+        obj->emit_error(NanNew<String>("conn.error"), true, 2003, errmsg.c_str());
         return;
       }
       assert(status == 0);
@@ -596,37 +562,39 @@ class Client : public ObjectWrap {
         int r = recv(obj->mysql_sock, conn_check_buf, 1, MSG_PEEK);
         if ((r == 0 || (r == -1 && CHECK_CONNRESET))
             && obj->state == STATE_CONNECTED) {
-          return obj->emit_error(err_symbol, true, ERROR_HANGUP,
+          return obj->emit_error(NanNew<String>("conn.error"), true, ERROR_HANGUP,
                                  STR_ERROR_HANGUP);
         }
       }
       obj->do_work(mysql_status);
     }
 
-    void emit(Persistent<String>eventName) {
-      HandleScope scope;
+    void emit(Local<String>eventName) {
+      NanScope();
+
       Handle<Value> emit_argv[1] = { eventName };
       TryCatch try_catch;
-      Emit->Call(handle_, 1, emit_argv);
+      Emit->Call(NanObjectWrapHandle(this), 1, emit_argv);
       if (try_catch.HasCaught())
         FatalException(try_catch);
     }
 
-    void emit_error(Persistent<String>eventName, bool doClose = false,
+    void emit_error(Local<String>eventName, bool doClose = false,
                    unsigned int errNo = 0, const char *errMsg = NULL) {
-      HandleScope scope;
+      NanScope();
+
       had_error = true;
       unsigned int errCode = mysql_errno(&mysql);
       if (errNo > 0)
         errCode = errNo;
       Local<Object> err =
           Exception::Error(
-            String::New(errMsg ? errMsg : mysql_error(&mysql))
+            NanNew<String>(errMsg ? errMsg : mysql_error(&mysql))
           )->ToObject();
-      err->Set(code_symbol, Integer::NewFromUnsigned(errCode));
+      err->Set(NanNew<String>("code"), NanNew<Integer, uint32_t>(errCode));
       Handle<Value> emit_argv[2] = { eventName, err };
       TryCatch try_catch;
-      Emit->Call(handle_, 2, emit_argv);
+      Emit->Call(NanObjectWrapHandle(this), 2, emit_argv);
       if (try_catch.HasCaught())
         FatalException(try_catch);
       if (doClose || errCode == 2013 || errCode == ERROR_HANGUP)
@@ -635,23 +603,25 @@ class Client : public ObjectWrap {
 
     void emit_done(my_ulonglong insert_id = 0, my_ulonglong affected_rows = 0,
                   my_ulonglong num_rows = 0) {
-      HandleScope scope;
-      Local<Object> info = Object::New();
-      info->Set(insert_id_symbol, Number::New(insert_id));
-      info->Set(affected_rows_symbol,
-                Number::New(affected_rows == (my_ulonglong) - 1
-                             ? 0
-                             : affected_rows));
-      info->Set(num_rows_symbol, Number::New(num_rows));
-      Handle<Value> emit_argv[2] = { qdone_symbol, info };
+      NanScope();
+
+      Local<Object> info = NanNew<Object>();
+      info->Set(NanNew<String>("insertId"), NanNew<Number>(insert_id));
+      info->Set(NanNew<String>("affectedRows"),
+                NanNew<Number>(affected_rows == (my_ulonglong) - 1
+                                ? 0
+                                : affected_rows));
+      info->Set(NanNew<String>("numRows"), NanNew<Number>(num_rows));
+      Handle<Value> emit_argv[2] = { NanNew<String>("query.done"), info };
       TryCatch try_catch;
-      Emit->Call(handle_, 2, emit_argv);
+      Emit->Call(NanObjectWrapHandle(this), 2, emit_argv);
       if (try_catch.HasCaught())
         FatalException(try_catch);
     }
 
     void emit_row() {
-      HandleScope scope;
+      NanScope();
+
       MYSQL_FIELD field, *fields;
       unsigned int f = 0, n_fields = mysql_num_fields(cur_query.result),
                    i = 0, vlen;
@@ -660,105 +630,97 @@ class Client : public ObjectWrap {
       unsigned long *lengths;
       Handle<Value> field_value;
       Local<Object> row, metadata, types, charsetNrs, dbs, tables, orgTables, names, orgNames;
+      Local<String> fieldName;
 
       if (n_fields == 0)
         return;
       lengths = mysql_fetch_lengths(cur_query.result);
       fields = mysql_fetch_fields(cur_query.result);
       if (cur_query.use_array) {
-        row = Array::New(n_fields);
+        row = NanNew<Array>(n_fields);
         if (config.metadata) {
-          types = Array::New(n_fields);
-          charsetNrs = Array::New(n_fields);
-          dbs = Array::New(n_fields);
-          tables = Array::New(n_fields);
-          orgTables = Array::New(n_fields);
-          names = Array::New(n_fields);
-          orgNames = Array::New(n_fields);
+          types = NanNew<Array>(n_fields);
+          charsetNrs = NanNew<Array>(n_fields);
+          dbs = NanNew<Array>(n_fields);
+          tables = NanNew<Array>(n_fields);
+          orgTables = NanNew<Array>(n_fields);
+          names = NanNew<Array>(n_fields);
+          orgNames = NanNew<Array>(n_fields);
         }
       }
       else {
-        if (!cur_query.column_names) {
-          cur_query.column_names =
-            (Persistent<String>*) malloc(sizeof(Persistent<String>) * n_fields);
-          cur_query.column_count = n_fields;
-          for (f = 0; f < n_fields; ++f) {
-            field = fields[f];
-            cur_query.column_names[f] = Persistent<String>::New(
-                                            String::New(field.name,
-                                                        field.name_length)
-                                        );
-          }
-        }
-        row = Object::New();
+        row = NanNew<Object>();
         if (config.metadata) {
-          types = Object::New();
-          charsetNrs = Object::New();
-          dbs = Object::New();
-          tables = Object::New();
-          orgTables = Object::New();
-          names = Object::New();
-          orgNames = Object::New();
+          types = NanNew<Object>();
+          charsetNrs = NanNew<Object>();
+          dbs = NanNew<Object>();
+          tables = NanNew<Object>();
+          orgTables = NanNew<Object>();
+          names = NanNew<Object>();
+          orgNames = NanNew<Object>();
         }
       }
       for (f = 0; f < n_fields; ++f) {
+        field = fields[f];
+
         if (cur_query.row[f] == NULL)
-          field_value = Null();
+          field_value = NanNull();
         else if (IS_BINARY(fields[f])) {
           vlen = lengths[f];
           buf = (unsigned char*)(cur_query.row[f]);
           new_buf = new uint16_t[vlen];
           for (i = 0; i < vlen; ++i)
             new_buf[i] = buf[i];
-          field_value = String::New(new_buf, vlen);
+          field_value = NanNew<String>(new_buf, vlen);
           delete[] new_buf;
         } else
-          field_value = String::New(cur_query.row[f], lengths[f]);
+          field_value = NanNew<String>(cur_query.row[f], lengths[f]);
 
         if (cur_query.use_array)
           row->Set(f, field_value);
-        else
-          row->Set(cur_query.column_names[f], field_value);
+        else{
+          fieldName = NanNew(field.name, field.name_length);
+          row->Set(fieldName, field_value);
+        }
 
         if (config.metadata) {
-          field = fields[f];
           if (cur_query.use_array) {
-            types->Set(f, String::New(FieldTypeToString(field.type)));
-            charsetNrs->Set(f, Integer::NewFromUnsigned(field.charsetnr));            
-            dbs->Set(f, String::New(field.db));
-            tables->Set(f, String::New(field.table));
-            orgTables->Set(f, String::New(field.org_table));
-            names->Set(f, String::New(field.name));
-            orgNames->Set(f, String::New(field.org_name));
+            types->Set(f, NanNew<String>(FieldTypeToString(field.type)));
+            charsetNrs->Set(f, NanNew<Integer, uint32_t>(field.charsetnr));            
+            dbs->Set(f, NanNew<String>(field.db));
+            tables->Set(f, NanNew<String>(field.table));
+            orgTables->Set(f, NanNew<String>(field.org_table));
+            names->Set(f, NanNew<String>(field.name));
+            orgNames->Set(f, NanNew<String>(field.org_name));
           }
           else {
-            types->Set(cur_query.column_names[f], String::New(FieldTypeToString(field.type)));
-            charsetNrs->Set(cur_query.column_names[f], Integer::NewFromUnsigned(field.charsetnr));            
-            dbs->Set(cur_query.column_names[f], String::New(field.db));
-            tables->Set(cur_query.column_names[f], String::New(field.table));
-            orgTables->Set(cur_query.column_names[f], String::New(field.org_table));
-            names->Set(cur_query.column_names[f], String::New(field.name));
-            orgNames->Set(cur_query.column_names[f], String::New(field.org_name));
+            types->Set(fieldName, NanNew<String>(FieldTypeToString(field.type)));
+            charsetNrs->Set(fieldName, NanNew<Integer, uint32_t>(field.charsetnr));            
+            dbs->Set(fieldName, NanNew<String>(field.db));
+            tables->Set(fieldName, NanNew<String>(field.table));
+            orgTables->Set(fieldName, NanNew<String>(field.org_table));
+            names->Set(fieldName, NanNew<String>(field.name));
+            orgNames->Set(fieldName, NanNew<String>(field.org_name));
           }
         }
       }
 
       TryCatch try_catch;
       if (config.metadata) {
-        metadata = Object::New();
-        metadata->Set(String::New("types"), types);
-        metadata->Set(String::New("charsetNrs"), charsetNrs);
-        metadata->Set(String::New("dbs"), dbs);
-        metadata->Set(String::New("tables"), tables);
-        metadata->Set(String::New("orgTables"), orgTables);
-        metadata->Set(String::New("names"), names);
-        metadata->Set(String::New("orgNames"), orgNames);
+        metadata = NanNew<Object>();
+        metadata->Set(NanNew<String>("types"), types);
+        metadata->Set(NanNew<String>("charsetNrs"), charsetNrs);
+        metadata->Set(NanNew<String>("dbs"), dbs);
+        metadata->Set(NanNew<String>("tables"), tables);
+        metadata->Set(NanNew<String>("orgTables"), orgTables);
+        metadata->Set(NanNew<String>("names"), names);
+        metadata->Set(NanNew<String>("orgNames"), orgNames);
 
-        Handle<Value> emit_argv[3] = { qrow_symbol, row, metadata };
-        Emit->Call(handle_, 3, emit_argv);
+        Handle<Value> emit_argv[3] = { NanNew<String>("query.row"), row, metadata };
+        Emit->Call(NanObjectWrapHandle(this), 3, emit_argv);
       } else {
-        Handle<Value> emit_argv[2] = { qrow_symbol, row };
-        Emit->Call(handle_, 2, emit_argv);
+        Handle<Value> emit_argv[2] = { NanNew<String>("query.row"), row };
+        Emit->Call(NanObjectWrapHandle(this), 2, emit_argv);
       }
 
       if (try_catch.HasCaught())
@@ -801,81 +763,74 @@ class Client : public ObjectWrap {
         }
     }
 
-    static Handle<Value> New(const Arguments& args) {
-      HandleScope scope;
+    static NAN_METHOD(New) {
+      NanScope();
 
       if (!args.IsConstructCall()) {
-        return ThrowException(Exception::TypeError(
-          String::New("Use `new` to create instances of this object."))
-        );
+        return NanThrowError("Use `new` to create instances of this object.");
       }
 
       Client *obj = new Client();
       obj->Wrap(args.This());
       obj->Ref();
 
-      obj->Emit = Persistent<Function>::New(
-                    Local<Function>::Cast(obj->handle_->Get(emit_symbol))
-                  );
 
-      return args.This();
+      obj->Emit = new NanCallback( (NanObjectWrapHandle(obj)->Get(NanNew<String>("emit"))).As<Function>() );
+
+      NanReturnThis();
     }
 
-    static Handle<Value> Escape(const Arguments& args) {
-      HandleScope scope;
+    static NAN_METHOD(Escape) {
       Client *obj = ObjectWrap::Unwrap<Client>(args.This());
 
+      NanScope();
+
       if (obj->state < STATE_CONNECTED) {
-        return ThrowException(Exception::Error(
-          String::New("Not connected"))
-        );
+        return NanThrowError("Not connected");
       } else if (args.Length() == 0 || !args[0]->IsString()) {
-        return ThrowException(Exception::Error(
-          String::New("You must supply a string"))
-        );
+        return NanThrowTypeError("You must supply a string");
       }
+
       String::Utf8Value arg_v(args[0]);
       unsigned long arg_len = arg_v.length();
       char *result = (char*) malloc(arg_len * 2 + 1);
       unsigned long result_len = obj->escape((char*)*arg_v, arg_len, result);
-      Local<String> escaped_s = String::New(result, result_len);
+      Local<String> escaped_s = NanNew<String>(result, result_len);
       free(result);
-      return scope.Close(escaped_s);
+
+      NanReturnValue(escaped_s);
     }
 
-    static Handle<Value> Connect(const Arguments& args) {
-      HandleScope scope;
+    static NAN_METHOD(Connect) {
       Client *obj = ObjectWrap::Unwrap<Client>(args.This());
 
+      NanScope();
+
       if (obj->state != STATE_CLOSED) {
-        return ThrowException(Exception::Error(
-          String::New("Not ready to connect"))
-        );
+        return NanThrowError("Not ready to connect");
       } else if (!args[0]->IsObject()) {
-        return ThrowException(Exception::Error(
-          String::New("Missing configuration object"))
-        );
+        return NanThrowTypeError("Missing configuration object");
       }
 
       obj->init();
 
       Local<Object> cfg = args[0]->ToObject();
-      Local<Value> user_v = cfg->Get(cfg_user_symbol);
-      Local<Value> password_v = cfg->Get(cfg_pwd_symbol);
-      Local<Value> ip_v = cfg->Get(cfg_host_symbol);
-      Local<Value> port_v = cfg->Get(cfg_port_symbol);
-      Local<Value> socket_v = cfg->Get(cfg_socket_symbol);
-      Local<Value> db_v = cfg->Get(cfg_db_symbol);
-      Local<Value> timeout_v = cfg->Get(cfg_timeout_symbol);
-      Local<Value> secauth_v = cfg->Get(cfg_secauth_symbol);
-      Local<Value> multi_v = cfg->Get(cfg_multi_symbol);
-      Local<Value> compress_v = cfg->Get(cfg_compress_symbol);
-      Local<Value> ssl_v = cfg->Get(cfg_ssl_symbol);
-      Local<Value> metadata_v = cfg->Get(cfg_metadata_symbol);
-      Local<Value> local_infile_v = cfg->Get(cfg_local_infile_symbol);
-      Local<Value> default_file_v = cfg->Get(cfg_read_default_file);
-      Local<Value> default_group_v = cfg->Get(cfg_read_default_group);
-      Local<Value> charset_v = cfg->Get(cfg_charset_symbol);
+      Local<Value> user_v = cfg->Get(NanNew<String>("user"));
+      Local<Value> password_v = cfg->Get(NanNew<String>("password"));
+      Local<Value> ip_v = cfg->Get(NanNew<String>("host"));
+      Local<Value> port_v = cfg->Get(NanNew<String>("port"));
+      Local<Value> socket_v = cfg->Get(NanNew<String>("unixSocket"));
+      Local<Value> db_v = cfg->Get(NanNew<String>("db"));
+      Local<Value> timeout_v = cfg->Get(NanNew<String>("connTimeout"));
+      Local<Value> secauth_v = cfg->Get(NanNew<String>("secureAuth"));
+      Local<Value> multi_v = cfg->Get(NanNew<String>("multiStatements"));
+      Local<Value> compress_v = cfg->Get(NanNew<String>("compress"));
+      Local<Value> ssl_v = cfg->Get(NanNew<String>("ssl"));
+      Local<Value> metadata_v = cfg->Get(NanNew<String>("metadata"));
+      Local<Value> local_infile_v = cfg->Get(NanNew<String>("local_infile"));
+      Local<Value> default_file_v = cfg->Get(NanNew<String>("read_default_file"));
+      Local<Value> default_group_v = cfg->Get(NanNew<String>("read_default_group"));
+      Local<Value> charset_v = cfg->Get(NanNew<String>("charset"));
       
       if (!user_v->IsString() || user_v->ToString()->Length() == 0)
         obj->config.user = NULL;
@@ -952,12 +907,12 @@ class Client : public ObjectWrap {
           obj->config.ssl_cipher = DEFAULT_CIPHER;
         if (ssl_v->IsObject()) {
           Local<Object> ssl_opts = ssl_v->ToObject();
-          Local<Value> key = ssl_opts->Get(cfg_ssl_key_symbol);
-          Local<Value> cert = ssl_opts->Get(cfg_ssl_cert_symbol);
-          Local<Value> ca = ssl_opts->Get(cfg_ssl_ca_symbol);
-          Local<Value> capath = ssl_opts->Get(cfg_ssl_capath_symbol);
-          Local<Value> cipher = ssl_opts->Get(cfg_ssl_cipher_symbol);
-          Local<Value> reject = ssl_opts->Get(cfg_ssl_reject_symbol);
+          Local<Value> key = ssl_opts->Get(NanNew<String>("key"));
+          Local<Value> cert = ssl_opts->Get(NanNew<String>("cert"));
+          Local<Value> ca = ssl_opts->Get(NanNew<String>("ca"));
+          Local<Value> capath = ssl_opts->Get(NanNew<String>("capath"));
+          Local<Value> cipher = ssl_opts->Get(NanNew<String>("cipher"));
+          Local<Value> reject = ssl_opts->Get(NanNew<String>("rejectUnauthorized"));
 
           if (key->IsString() && key->ToString()->Length() > 0)
             obj->config.ssl_key = strdup(*(String::Utf8Value(key)));
@@ -995,156 +950,123 @@ class Client : public ObjectWrap {
       
       obj->connect();
 
-      return Undefined();
+      NanReturnUndefined();
     }
 
-    static Handle<Value> AbortQuery(const Arguments& args) {
-      HandleScope scope;
+    static NAN_METHOD(AbortQuery) {
       Client *obj = ObjectWrap::Unwrap<Client>(args.This());
+
+      NanScope();
+
       if (args.Length() == 0 || !args[0]->IsUint32()) {
-        return ThrowException(Exception::Error(
-          String::New("Missing abort level"))
-        );
+        return NanThrowTypeError("Missing abort level");
       }
       obj->abort_query((abort_t)args[0]->Uint32Value());
-      return Undefined();
+      
+      NanReturnUndefined();
     }
 
-    static Handle<Value> Query(const Arguments& args) {
-      HandleScope scope;
+    static NAN_METHOD(Query) {
       Client *obj = ObjectWrap::Unwrap<Client>(args.This());
+
+      NanScope();
+
       if (obj->state != STATE_CONNECTED) {
-        return ThrowException(Exception::Error(
-          String::New("Not ready to query"))
-        );
+        return NanThrowError("Not ready to query");
       }
       if (args.Length() == 0 || !args[0]->IsString()) {
-        return ThrowException(Exception::Error(
-          String::New("Query expected"))
-        );
+        return NanThrowTypeError("Query expected");
       }
       String::Utf8Value query(args[0]);
       obj->query(*query,
                  (args.Length() > 1 && args[1]->IsBoolean()
                   && args[1]->BooleanValue()));
-      return Undefined();
+      
+      NanReturnUndefined();
     }
 
-    static Handle<Value> Close(const Arguments& args) {
-      HandleScope scope;
+    static NAN_METHOD(Close) {
       Client *obj = ObjectWrap::Unwrap<Client>(args.This());
+
+      NanScope();
+
       if (obj->state == STATE_CLOSED) {
-        return ThrowException(Exception::Error(
-          String::New("Already closed"))
-        );
+        return NanThrowError("Already closed");
       }
       obj->close();
       obj->Unref();
-      return Undefined();
+
+      NanReturnUndefined();
     }
 
-    static Handle<Value> IsMariaDB(const Arguments& args) {
-      HandleScope scope;
+    static NAN_METHOD(IsMariaDB) {
       Client *obj = ObjectWrap::Unwrap<Client>(args.This());
+
+      NanScope();
+
       if (obj->state < STATE_CONNECTED) {
-        return ThrowException(Exception::Error(
-          String::New("Not connected"))
-        );
+        return NanThrowError("Not connected");
       }
-      return scope.Close(Boolean::New(mariadb_connection(&obj->mysql) == 1));
+      
+      NanReturnValue( NanNew<Boolean>(mariadb_connection(&obj->mysql) == 1) );
     }
 
     static void Initialize(Handle<Object> target) {
-      HandleScope scope;
+      NanScope();
 
-      Local<FunctionTemplate> tpl = FunctionTemplate::New(New);
-      Local<String> name = String::NewSymbol("Client");
+      Local<String> name = NanNew<String>("Client");
 
-      Client_constructor = Persistent<FunctionTemplate>::New(tpl);
-      Client_constructor->InstanceTemplate()->SetInternalFieldCount(1);
-      Client_constructor->SetClassName(name);
+      Local<FunctionTemplate> tpl = NanNew<FunctionTemplate>(New);
+      tpl->InstanceTemplate()->SetInternalFieldCount(1);
+      tpl->SetClassName(name);
 
-      NODE_SET_PROTOTYPE_METHOD(Client_constructor, "connect", Connect);
-      NODE_SET_PROTOTYPE_METHOD(Client_constructor, "query", Query);
-      NODE_SET_PROTOTYPE_METHOD(Client_constructor, "abortQuery", AbortQuery);
-      NODE_SET_PROTOTYPE_METHOD(Client_constructor, "escape", Escape);
-      NODE_SET_PROTOTYPE_METHOD(Client_constructor, "end", Close);
-      NODE_SET_PROTOTYPE_METHOD(Client_constructor, "isMariaDB", IsMariaDB);
+      NanAssignPersistent(Client_constructor, tpl);
 
-      emit_symbol = NODE_PSYMBOL("emit");
-      connect_symbol = NODE_PSYMBOL("connect");
-      err_symbol = NODE_PSYMBOL("conn.error");
-      resquery_symbol = NODE_PSYMBOL("results.query");
-      resabort_symbol = NODE_PSYMBOL("results.abort");
-      resdone_symbol = NODE_PSYMBOL("results.done");
-      qerr_symbol = NODE_PSYMBOL("query.error");
-      qabort_symbol = NODE_PSYMBOL("query.abort");
-      qrow_symbol = NODE_PSYMBOL("query.row");
-      qrowerr_symbol = NODE_PSYMBOL("query.row.error");
-      qdone_symbol = NODE_PSYMBOL("query.done");
-      close_symbol = NODE_PSYMBOL("close");
-      insert_id_symbol = NODE_PSYMBOL("insertId");
-      affected_rows_symbol = NODE_PSYMBOL("affectedRows");
-      num_rows_symbol = NODE_PSYMBOL("numRows");
-      code_symbol = NODE_PSYMBOL("code");
-      cfg_user_symbol = NODE_PSYMBOL("user");
-      cfg_pwd_symbol = NODE_PSYMBOL("password");
-      cfg_host_symbol = NODE_PSYMBOL("host");
-      cfg_port_symbol = NODE_PSYMBOL("port");
-      cfg_socket_symbol = NODE_PSYMBOL("unixSocket");
-      cfg_db_symbol = NODE_PSYMBOL("db");
-      cfg_timeout_symbol = NODE_PSYMBOL("connTimeout");
-      cfg_secauth_symbol = NODE_PSYMBOL("secureAuth");
-      cfg_multi_symbol = NODE_PSYMBOL("multiStatements");
-      cfg_compress_symbol = NODE_PSYMBOL("compress");
-      cfg_metadata_symbol = NODE_PSYMBOL("metadata");
-      cfg_ssl_symbol = NODE_PSYMBOL("ssl");
-      cfg_ssl_key_symbol = NODE_PSYMBOL("key");
-      cfg_ssl_cert_symbol = NODE_PSYMBOL("cert");
-      cfg_ssl_ca_symbol = NODE_PSYMBOL("ca");
-      cfg_ssl_capath_symbol = NODE_PSYMBOL("capath");
-      cfg_ssl_cipher_symbol = NODE_PSYMBOL("cipher");
-      cfg_ssl_reject_symbol = NODE_PSYMBOL("rejectUnauthorized");
-      cfg_local_infile_symbol = NODE_PSYMBOL("local_infile");
-      cfg_read_default_file = NODE_PSYMBOL("read_default_file");
-      cfg_read_default_group = NODE_PSYMBOL("read_default_group");
-      cfg_charset_symbol = NODE_PSYMBOL("charset");
+      NODE_SET_PROTOTYPE_METHOD(tpl, "connect", Connect);
+      NODE_SET_PROTOTYPE_METHOD(tpl, "query", Query);
+      NODE_SET_PROTOTYPE_METHOD(tpl, "abortQuery", AbortQuery);
+      NODE_SET_PROTOTYPE_METHOD(tpl, "escape", Escape);
+      NODE_SET_PROTOTYPE_METHOD(tpl, "end", Close);
+      NODE_SET_PROTOTYPE_METHOD(tpl, "isMariaDB", IsMariaDB);
 
-      target->Set(name, Client_constructor->GetFunction());
+      // Make it visible in JavaScript land
+      target->Set(name, tpl->GetFunction());
     }
 };
 
-static Handle<Value> Escape(const Arguments& args) {
-  HandleScope scope;
+static NAN_METHOD(Escape) {
+  NanScope();
 
   if (args.Length() == 0 || !args[0]->IsString()) {
-    return ThrowException(Exception::Error(
-      String::New("You must supply a string"))
-    );
+    return NanThrowTypeError("You must supply a string");
   }
+
   String::Utf8Value arg_v(args[0]);
   unsigned long arg_len = arg_v.length();
   char *result = (char*) malloc(arg_len * 2 + 1);
-  unsigned long result_len =
-          mysql_escape_string_ex(result, (char*)*arg_v, arg_len, "utf8");
-  Local<String> escaped_s = String::New(result, result_len);
+  unsigned long result_len = 
+        mysql_escape_string_ex(result, (char*)*arg_v, arg_len, "utf8");
+  Local<String> escaped_s = NanNew<String>(result, result_len);
   free(result);
-  return scope.Close(escaped_s);
+
+  NanReturnValue(escaped_s);
 }
 
-static Handle<Value> Version(const Arguments& args) {
-  HandleScope scope;
-  return scope.Close(String::New(mysql_get_client_info()));
+static NAN_METHOD(Version) {
+  NanScope();
+
+  NanReturnValue(NanNew<String>(mysql_get_client_info()));
 }
 
 extern "C" {
   void init(Handle<Object> target) {
-    HandleScope scope;
+    NanScope();
+
     Client::Initialize(target);
-    target->Set(String::NewSymbol("escape"),
-                FunctionTemplate::New(Escape)->GetFunction());
-    target->Set(String::NewSymbol("version"),
-                FunctionTemplate::New(Version)->GetFunction());
+    target->Set(NanNew<String>("escape"),
+                NanNew<FunctionTemplate>(Escape)->GetFunction());
+    target->Set(NanNew<String>("version"),
+                NanNew<FunctionTemplate>(Version)->GetFunction());
   }
 
   NODE_MODULE(sqlclient, init);
