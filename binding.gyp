@@ -7,6 +7,7 @@
       ],
       'include_dirs': [
         'deps/libmariadbclient/include',
+        "<!(node -e \"require('nan')\")"
       ],
       'cflags': [ '-O3' ],
       'conditions': [
