@@ -718,7 +718,7 @@ class Client : public ObjectWrap {
       DBG_LOG("cb_close() state=%s\n", state_strings[obj->state]);
 
       FREE(obj->poll_handle);
-      obj->onclose->Call(obj->context, 0, NULL);
+      obj->onclose->Call(NanNew<Object>(obj->context), 0, NULL);
     }
 
     static void cb_poll(uv_poll_t *handle, int status, int events) {
@@ -738,7 +738,7 @@ class Client : public ObjectWrap {
 
     void on_connect() {
       DBG_LOG("on_connect() state=%s\n", state_strings[state]);
-      onconnect->Call(context, 0, NULL);
+      onconnect->Call(NanNew<Object>(context), 0, NULL);
     }
 
     void on_error(bool doClose = false, unsigned int errNo = 0,
@@ -755,7 +755,7 @@ class Client : public ObjectWrap {
       err->Set(NanNew<String>(code_symbol), NanNew<Integer>(errCode));
 
       Handle<Value> argv[1] = { err };
-      onerror->Call(context, 1, argv);
+      onerror->Call(NanNew<Object>(context), 1, argv);
 
       if (doClose || IS_DEAD_ERRNO(errCode))
         close();
@@ -804,7 +804,19 @@ class Client : public ObjectWrap {
         for (f = 0; f < n_fields; ++f) {
           field = fields[f];
           if (need_metadata) {
-            metadata->Set(m++, FieldTypeToString(field.type));
+            Local<String> ret;
+            // http://dev.mysql.com/doc/refman/5.7/en/c-api-data-structures.html
+            switch (field.type) {
+#define X(suffix, abbr, literal)                            \
+              case MYSQL_TYPE_##suffix:                     \
+                ret = NanNew<String>(col_##abbr##_symbol);  \
+              break;
+              FIELD_TYPES
+#undef X
+              default:
+                ret = NanNew<String>(col_unsup_symbol);
+            }
+            metadata->Set(m++, ret);
             metadata->Set(m++, NanNew<Integer>(field.charsetnr));
             metadata->Set(m++, NanNew<String>(field.db));
             metadata->Set(m++, NanNew<String>(field.table));
@@ -819,7 +831,7 @@ class Client : public ObjectWrap {
         need_columns = need_metadata = false;
 
         Handle<Value> resinfo_argv[2] = { columns_v, metadata_v };
-        onresultinfo->Call(context, 2, resinfo_argv);
+        onresultinfo->Call(NanNew<Object>(context), 2, resinfo_argv);
       }
 
       for (f = 0; f < n_fields; ++f) {
@@ -841,7 +853,7 @@ class Client : public ObjectWrap {
       Handle<Value> argv[1] = {
         row
       };
-      onrow->Call(context, 1, argv);
+      onrow->Call(NanNew<Object>(context), 1, argv);
     }
 
     void on_resultend() {
@@ -861,17 +873,17 @@ class Client : public ObjectWrap {
          : NanNew<Number>(affRows)),
         NanNew<Number>(insId)
       };
-      onresultend->Call(context, 3, argv);
+      onresultend->Call(NanNew<Object>(context), 3, argv);
     }
 
     void on_ping() {
       DBG_LOG("on_ping() state=%s\n", state_strings[state]);
-      onping->Call(context, 0, NULL);
+      onping->Call(NanNew<Object>(context), 0, NULL);
     }
 
     void on_idle() {
       DBG_LOG("on_idle() state=%s\n", state_strings[state]);
-      onidle->Call(context, 0, NULL);
+      onidle->Call(NanNew<Object>(context), 0, NULL);
     }
 
     void apply_config(Handle<Object> cfg) {
@@ -1012,23 +1024,6 @@ class Client : public ObjectWrap {
       // always disable auto-reconnect
       my_bool reconnect = 0;
       mysql_options(&mysql, MYSQL_OPT_RECONNECT, &reconnect);
-    }
-
-    inline Handle<String> FieldTypeToString(enum_field_types v) {
-      NanScope();
-      Local<String> ret;
-      // http://dev.mysql.com/doc/refman/5.7/en/c-api-data-structures.html
-      switch (v) {
-#define X(suffix, abbr, literal)                      \
-        case MYSQL_TYPE_##suffix##:                   \
-          ret = NanNew<String>(col_##abbr##_symbol);  \
-        break;
-        FIELD_TYPES
-#undef X
-        default:
-          ret = NanNew<String>(col_unsup_symbol);
-      }
-      NanReturnValue(ret);
     }
 
     static NAN_METHOD(New) {
