@@ -1245,7 +1245,7 @@ static NAN_METHOD(Escape) {
   NanReturnValue(escaped_s);
 }
 
-static Handle<Value> Version(const Arguments& args) {
+static NAN_METHOD(Version) {
   DBG_LOG("version()\n");
   NanScope();
 
