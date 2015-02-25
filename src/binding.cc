@@ -266,7 +266,7 @@ class Client : public ObjectWrap {
 #undef X
 
     Client() {
-      DBG_LOG("Client()\n");
+      DBG_LOG("constructor()\n");
       state = STATE_CLOSED;
 
       is_destructing = false;
@@ -279,7 +279,7 @@ class Client : public ObjectWrap {
     }
 
     ~Client() {
-      DBG_LOG("~Client()\n");
+      DBG_LOG("~destructor()\n");
 #define X(name)       \
       if (on##name) \
         delete on##name;
@@ -446,7 +446,8 @@ class Client : public ObjectWrap {
       int err;
       bool done = false;
       while (!done) {
-        DBG_LOG("do_work() loop begin, state=%s\n", state_strings[state]);
+        DBG_LOG("do_work() loop begin, state=%s,is_cont=%d\n",
+                state_strings[state], is_cont);
         switch (state) {
           case STATE_CONNECT:
             if (!is_cont) {
@@ -703,13 +704,22 @@ class Client : public ObjectWrap {
           default:
             done = true;
         }
-        DBG_LOG("do_work() loop end, state=%s\n", state_strings[state]);
+        DBG_LOG("do_work() loop end, state=%s,is_cont=%d,done=%d\n",
+                state_strings[state], is_cont, done);
       }
       if (status & MYSQL_WAIT_READ)
         new_events |= UV_READABLE;
       if (status & MYSQL_WAIT_WRITE)
         new_events |= UV_WRITABLE;
       uv_poll_start(poll_handle, new_events, cb_poll);
+      DBG_LOG("do_work() end, new_events=%s\n",
+              ((event & (UV_READABLE|UV_WRITABLE)) == (UV_READABLE|UV_WRITABLE)
+               ? "READABLE,WRITABLE"
+               : event & UV_READABLE
+                 ? "READABLE"
+                 : event & UV_WRITABLE
+                   ? "WRITABLE"
+                   : "NONE"));
     }
 
     static void cb_close(uv_handle_t *handle) {
