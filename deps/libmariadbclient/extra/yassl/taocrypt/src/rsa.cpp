@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2000-2007 MySQL AB
+   Copyright (c) 2000, 2012, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -177,7 +177,7 @@ word32 RSA_BlockType1::UnPad(const byte* pkcsBlock, word32 pkcsBlockLen,
 
     // skip past the padding until we find the separator
     unsigned i=1;
-    while (i<pkcsBlockLen && pkcsBlock[i++]) { // null body
+    while (i<pkcsBlockLen && pkcsBlock[i++] == 0xFF) { // null body
         }
     if (!(i==pkcsBlockLen || pkcsBlock[i-1]==0))
         return 0;

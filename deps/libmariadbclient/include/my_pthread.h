@@ -1,5 +1,5 @@
-/* Copyright (C) 2000-2008 MySQL AB, 2008-2009 Sun Microsystems, Inc,
-   2010-2011 Oracle and/or its affiliates, 2009-2010 Monty Program Ab.
+/* Copyright (c) 2000, 2014, Oracle and/or its affiliates.
+   Copyright (c) 2009, 2014, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 /* Defines to make different thread packages compatible */
 
@@ -96,7 +96,7 @@ int pthread_create(pthread_t *, const pthread_attr_t *, pthread_handler, void *)
 int pthread_cond_init(pthread_cond_t *cond, const pthread_condattr_t *attr);
 int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex);
 int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
-			   struct timespec *abstime);
+			   const struct timespec *abstime);
 int pthread_cond_signal(pthread_cond_t *cond);
 int pthread_cond_broadcast(pthread_cond_t *cond);
 int pthread_cond_destroy(pthread_cond_t *cond);
@@ -104,8 +104,18 @@ int pthread_attr_init(pthread_attr_t *connect_att);
 int pthread_attr_setstacksize(pthread_attr_t *connect_att,DWORD stack);
 int pthread_attr_destroy(pthread_attr_t *connect_att);
 int my_pthread_once(my_pthread_once_t *once_control,void (*init_routine)(void));
-struct tm *localtime_r(const time_t *timep,struct tm *tmp);
-struct tm *gmtime_r(const time_t *timep,struct tm *tmp);
+
+static inline struct tm *localtime_r(const time_t *timep, struct tm *tmp)
+{
+  localtime_s(tmp, timep);
+  return tmp;
+}
+
+static inline struct tm *gmtime_r(const time_t *clock, struct tm *res)
+{
+  gmtime_s(res, clock);
+  return res;
+}
 
 void pthread_exit(void *a);
 int pthread_join(pthread_t thread, void **value_ptr);
@@ -119,7 +129,6 @@ int pthread_cancel(pthread_t thread);
 #define HAVE_LOCALTIME_R		1
 #define _REENTRANT			1
 #define HAVE_PTHREAD_ATTR_SETSTACKSIZE	1
-#define PTHREAD_STACK_MIN 65536
 
 #undef SAFE_MUTEX				/* This will cause conflicts */
 #define pthread_key(T,V)  DWORD V
@@ -138,6 +147,7 @@ int pthread_cancel(pthread_t thread);
 #define pthread_mutex_unlock(A)  (LeaveCriticalSection(A), 0)
 #define pthread_mutex_destroy(A) (DeleteCriticalSection(A), 0)
 #define pthread_kill(A,B) pthread_dummy((A) ? 0 : ESRCH)
+
 
 /* Dummy defines for easier code */
 #define pthread_attr_setdetachstate(A,B) pthread_dummy(0)
@@ -314,7 +324,6 @@ int my_pthread_mutex_trylock(pthread_mutex_t *mutex);
   for calculating an absolute time at which
   pthread_cond_timedwait should timeout
 */
-
 #define set_timespec(ABSTIME,SEC) set_timespec_nsec((ABSTIME),(SEC)*1000000000ULL)
 
 #ifndef set_timespec_nsec
@@ -419,24 +428,6 @@ void safe_mutex_free_deadlock_data(safe_mutex_t *mp);
 #define MYF_NO_DEADLOCK_DETECTION 2
 
 #ifdef SAFE_MUTEX
-#undef pthread_mutex_init
-#undef pthread_mutex_lock
-#undef pthread_mutex_unlock
-#undef pthread_mutex_destroy
-#undef pthread_mutex_wait
-#undef pthread_mutex_timedwait
-#undef pthread_mutex_t
-#undef pthread_cond_wait
-#undef pthread_cond_timedwait
-#undef pthread_mutex_trylock
-#define pthread_mutex_init(A,B) safe_mutex_init((A),(B),#A,__FILE__,__LINE__)
-#define pthread_mutex_lock(A) safe_mutex_lock((A),0,__FILE__, __LINE__)
-#define pthread_mutex_unlock(A) safe_mutex_unlock((A),__FILE__,__LINE__)
-#define pthread_mutex_destroy(A) safe_mutex_destroy((A),__FILE__,__LINE__)
-#define pthread_cond_wait(A,B) safe_cond_wait((A),(B),__FILE__,__LINE__)
-#define pthread_cond_timedwait(A,B,C) safe_cond_timedwait((A),(B),(C),__FILE__,__LINE__)
-#define pthread_mutex_trylock(A) safe_mutex_lock((A), MYF_TRY_LOCK, __FILE__, __LINE__)
-#define pthread_mutex_t safe_mutex_t
 #define safe_mutex_assert_owner(mp) \
           DBUG_ASSERT((mp)->count > 0 && \
                       pthread_equal(pthread_self(), (mp)->thread))
@@ -444,13 +435,22 @@ void safe_mutex_free_deadlock_data(safe_mutex_t *mp);
           DBUG_ASSERT(! (mp)->count || \
                       ! pthread_equal(pthread_self(), (mp)->thread))
 #define safe_mutex_setflags(mp, F)      do { (mp)->create_flags|= (F); } while (0)
+#define my_cond_timedwait(A,B,C) safe_cond_timedwait((A),(B),(C),__FILE__,__LINE__)
+#define my_cond_wait(A,B) safe_cond_wait((A), (B), __FILE__, __LINE__)
 #else
-#define my_pthread_mutex_init(A,B,C,D) pthread_mutex_init((A),(B))
-#define safe_mutex_assert_owner(mp)    do {} while(0)
-#define safe_mutex_assert_not_owner(mp) do {} while(0)
-#define safe_mutex_free_deadlock_data(mp) do {} while(0)
+
+#define safe_mutex_assert_owner(mp) do {} while (0)
+#define safe_mutex_assert_not_owner(mp) do {} while (0)
 #define safe_mutex_setflags(mp, F) do {} while (0)
-#endif /* SAFE_MUTEX */
+
+#if defined(MY_PTHREAD_FASTMUTEX)
+#define my_cond_timedwait(A,B,C) pthread_cond_timedwait((A), &(B)->mutex, (C))
+#define my_cond_wait(A,B) pthread_cond_wait((A), &(B)->mutex)
+#else
+#define my_cond_timedwait(A,B,C) pthread_cond_timedwait((A),(B),(C))
+#define my_cond_wait(A,B) pthread_cond_wait((A), (B))
+#endif /* MY_PTHREAD_FASTMUTEX */
+#endif /* !SAFE_MUTEX */
 
 #if defined(MY_PTHREAD_FASTMUTEX) && !defined(SAFE_MUTEX)
 typedef struct st_my_pthread_fastmutex_t
@@ -465,24 +465,6 @@ int my_pthread_fastmutex_init(my_pthread_fastmutex_t *mp,
                               const pthread_mutexattr_t *attr);
 int my_pthread_fastmutex_lock(my_pthread_fastmutex_t *mp);
 
-#undef pthread_mutex_init
-#undef pthread_mutex_lock
-#undef pthread_mutex_unlock
-#undef pthread_mutex_destroy
-#undef pthread_mutex_wait
-#undef pthread_mutex_timedwait
-#undef pthread_mutex_t
-#undef pthread_cond_wait
-#undef pthread_cond_timedwait
-#undef pthread_mutex_trylock
-#define pthread_mutex_init(A,B) my_pthread_fastmutex_init((A),(B))
-#define pthread_mutex_lock(A) my_pthread_fastmutex_lock(A)
-#define pthread_mutex_unlock(A) pthread_mutex_unlock(&(A)->mutex)
-#define pthread_mutex_destroy(A) pthread_mutex_destroy(&(A)->mutex)
-#define pthread_cond_wait(A,B) pthread_cond_wait((A),&(B)->mutex)
-#define pthread_cond_timedwait(A,B,C) pthread_cond_timedwait((A),&(B)->mutex,(C))
-#define pthread_mutex_trylock(A) pthread_mutex_trylock(&(A)->mutex)
-#define pthread_mutex_t my_pthread_fastmutex_t
 #endif /* defined(MY_PTHREAD_FASTMUTEX) && !defined(SAFE_MUTEX) */
 
 	/* READ-WRITE thread locking */
@@ -749,11 +731,10 @@ struct st_my_thread_var
   mysql_cond_t * volatile current_cond;
   pthread_t pthread_self;
   my_thread_id id;
-  int cmp_length;
   int volatile abort;
   my_bool init;
   struct st_my_thread_var *next,**prev;
-  void *opt_info;
+  void *keycache_link;
   uint  lock_type; /* used by conditional release the queue */
   void  *stack_ends_here;
   safe_mutex_t *mutex_in_use;
@@ -855,6 +836,11 @@ extern uint thd_lib_detected;
   }  while(0)
 #else
 #define mysql_mutex_record_order(A,B) do { } while(0) 
+#endif
+
+/* At least Windows and NetBSD do not have this definition */
+#ifndef PTHREAD_STACK_MIN
+#define PTHREAD_STACK_MIN 65536
 #endif
 
 #ifdef  __cplusplus

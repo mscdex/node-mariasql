@@ -1,7 +1,7 @@
 #ifndef ERRMSG_INCLUDED
 #define ERRMSG_INCLUDED
 
-/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -16,8 +16,12 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA */
 
-/* Error messages for MySQL clients */
-/* (Error messages for the daemon are in sql/share/errmsg.txt) */
+/*
+  Error messages numbers for MySQL clients.
+  The error messages itself are in libmysql/errmsg.c
+
+  Error messages for the mysqld daemon are in sql/share/errmsg.txt
+*/
 
 #ifdef	__cplusplus
 extern "C" {
@@ -32,7 +36,9 @@ extern const char *client_errors[];	/* Error messages */
 #define CR_MIN_ERROR		2000	/* For easier client code */
 #define CR_MAX_ERROR		2999
 #if !defined(ER)
-#define ER(X) client_errors[(X)-CR_MIN_ERROR]
+#define ER(X) (((X) >= CR_ERROR_FIRST && (X) <= CR_ERROR_LAST)? \
+               client_errors[(X)-CR_ERROR_FIRST]: client_errors[CR_UNKNOWN_ERROR])
+
 #endif
 #define CLIENT_ERRMAP		2	/* Errormap used by my_error() */
 
@@ -102,7 +108,9 @@ extern const char *client_errors[];	/* Error messages */
 #define CR_NEW_STMT_METADATA                    2057
 #define CR_ALREADY_CONNECTED                    2058
 #define CR_AUTH_PLUGIN_CANNOT_LOAD              2059
-#define CR_ERROR_LAST  /*Copy last error nr:*/  2059
+#define CR_DUPLICATE_CONNECTION_ATTR            2060
+#define CR_AUTH_PLUGIN_ERR                      2061
+#define CR_ERROR_LAST  /*Copy last error nr:*/  2061
 /* Add error numbers before CR_ERROR_LAST and change it accordingly. */
 
 #endif /* ERRMSG_INCLUDED */

@@ -1,6 +1,5 @@
-/* Copyright (c) 2001 Jan Pazdziora.
-   Copyright (c) 2002-2007 MySQL AB
-   Copyright (c) 2009-2011, Monty Program Ab
+/* Copyright (c) 2002, 2013, Oracle and/or its affiliates.
+   Copyright (c) 2009, 2014, SkySQL Ab.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -489,9 +488,11 @@ int my_strnncollsp_win1250ch(CHARSET_INFO * cs,
 }
 
 
-static size_t my_strnxfrm_win1250ch(CHARSET_INFO * cs  __attribute__((unused)),
-                                    uchar *dest, size_t len, 
-                                    const uchar *src, size_t srclen)
+static size_t
+my_strnxfrm_win1250ch(CHARSET_INFO *cs  __attribute__((unused)),
+                      uchar *dest, size_t len,
+                      uint nweights_arg __attribute__((unused)),
+                      const uchar *src, size_t srclen, uint flags)
 {
   int value;
   const uchar *p;
@@ -499,15 +500,23 @@ static size_t my_strnxfrm_win1250ch(CHARSET_INFO * cs  __attribute__((unused)),
   size_t totlen = 0;
   p = src;
 
-  do {
+  if (!(flags & 0x0F)) /* All levels by default */                              
+    flags|= 0x0F;
+
+  while (totlen < len)
+  {
     NEXT_CMP_VALUE(src, p, pass, value, (int)srclen);
-    if (totlen <= len)
-      dest[totlen] = value;
-    totlen++;
-  } while (value) ;
-  if (len > totlen)
-    bfill(dest + totlen, len - totlen, ' ');
-  return len;
+    if (!value)
+      break;
+    if ((1 << pass) & flags)
+      dest[totlen++] = value;
+  }
+  if ((flags & MY_STRXFRM_PAD_TO_MAXLEN) && len > totlen)
+  {
+    memset(dest + totlen, 0x00, len - totlen);
+    totlen= len;
+  }
+  return totlen;
 }
 
 #undef IS_END
@@ -681,7 +690,7 @@ static MY_COLLATION_HANDLER my_collation_czech_ci_handler =
 struct charset_info_st my_charset_cp1250_czech_ci =
 {
   34,0,0,                                     /* number    */
-  MY_CS_COMPILED|MY_CS_STRNXFRM|MY_CS_CSSORT, /* state     */
+  MY_CS_COMPILED|MY_CS_STRNXFRM|MY_CS_CSSORT|MY_CS_STRNXFRM_BAD_NWEIGHTS, /* state     */
   "cp1250",                                   /* cs name   */
   "cp1250_czech_cs",                          /* name      */
   "",                                         /* comment   */
@@ -690,11 +699,10 @@ struct charset_info_st my_charset_cp1250_czech_ci =
   to_lower_win1250ch,
   to_upper_win1250ch,
   sort_order_win1250ch,
-  NULL,				/* contractions */
-  NULL,				/* sort_order_big*/
+  NULL,				/* uca          */
   tab_cp1250_uni,		/* tab_to_uni   */
   idx_uni_cp1250,		/* tab_from_uni */
-  my_unicase_default,           /* caseinfo     */
+  &my_unicase_default,          /* caseinfo     */
   NULL,				/* state_map    */
   NULL,				/* ident_map    */
   2,				/* strxfrm_multiply */
@@ -706,6 +714,7 @@ struct charset_info_st my_charset_cp1250_czech_ci =
   0,				/* max_sort_char */
   ' ',                          /* pad char      */
   0,                            /* escape_with_backslash_is_dangerous */
+  2,                            /* levels_for_order   */
   &my_charset_8bit_handler,
   &my_collation_czech_ci_handler
 };

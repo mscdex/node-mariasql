@@ -175,6 +175,36 @@ my_bool dynstr_append_os_quoted(DYNAMIC_STRING *str, const char *append, ...)
   return ret;
 }
 
+my_bool dynstr_append_quoted(DYNAMIC_STRING *str,
+                             const char *append, size_t len,
+                             char quote)
+{
+  uint additional= (str->alloc_increment ? str->alloc_increment : 10);
+  uint lim= additional;
+  uint i;
+  if (dynstr_realloc(str, len + additional + 2))
+    return TRUE;
+  str->str[str->length++]= quote;
+  for (i= 0; i < len; i++)
+  {
+    register char c= append[i];
+    if (c == quote || c == '\\')
+    {
+      if (!lim)
+      {
+        if (dynstr_realloc(str, additional))
+          return TRUE;
+        lim= additional;
+      }
+      lim--;
+      str->str[str->length++]= '\\';
+    }
+    str->str[str->length++]= c;
+  }
+  str->str[str->length++]= quote;
+  return FALSE;
+}
+
 
 void dynstr_free(DYNAMIC_STRING *str)
 {

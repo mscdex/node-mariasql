@@ -173,7 +173,7 @@
 /* #undef HAVE_GETRUSAGE */
 /* #undef HAVE_GETTIMEOFDAY */
 /* #undef HAVE_GETWD */
-/* #undef HAVE_GMTIME_R */
+#define HAVE_GMTIME_R 1
 /* #undef gmtime_r */
 /* #undef HAVE_INITGROUPS */
 /* #undef HAVE_ISSETUGID */
@@ -186,7 +186,7 @@
 /* #undef HAVE_LARGE_PAGE_OPTION */
 #define HAVE_LDIV 1
 /* #undef HAVE_LRAND48 */
-/* #undef HAVE_LOCALTIME_R */
+#define HAVE_LOCALTIME_R 1
 /* #undef HAVE_LOG2 */
 #define HAVE_LONGJMP 1
 /* #undef HAVE_LSTAT */

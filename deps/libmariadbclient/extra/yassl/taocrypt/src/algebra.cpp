@@ -1,5 +1,5 @@
 /*
-   Copyright (c) 2005, 2010, Oracle and/or its affiliates
+   Copyright (c) 2005, 2012, Oracle and/or its affiliates
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -185,10 +185,10 @@ Integer AbstractGroup::CascadeScalarMultiply(const Element &x,
 
 struct WindowSlider
 {
-    WindowSlider(const Integer &expIn, bool fastNegateIn,
+    WindowSlider(const Integer &exp, bool fastNegate,
                  unsigned int windowSizeIn=0)
-        : exp(expIn), windowModulus(Integer::One()), windowSize(windowSizeIn),
-          windowBegin(0), fastNegate(fastNegateIn), firstTime(true),
+        : exp(exp), windowModulus(Integer::One()), windowSize(windowSizeIn),
+          windowBegin(0), fastNegate(fastNegate), firstTime(true),
           finished(false)
     {
         if (windowSize == 0)
@@ -324,14 +324,4 @@ void AbstractRing::SimultaneousExponentiate(Integer *results,
 
 
 } // namespace
-
-
-#ifdef HAVE_EXPLICIT_TEMPLATE_INSTANTIATION
-namespace mySTL {
-template TaoCrypt::WindowSlider* uninit_copy<TaoCrypt::WindowSlider*, TaoCrypt::WindowSlider*>(TaoCrypt::WindowSlider*, TaoCrypt::WindowSlider*, TaoCrypt::WindowSlider*);
-template void destroy<TaoCrypt::WindowSlider*>(TaoCrypt::WindowSlider*, TaoCrypt::WindowSlider*);
-template TaoCrypt::WindowSlider* GetArrayMemory<TaoCrypt::WindowSlider>(size_t);
-template void FreeArrayMemory<TaoCrypt::WindowSlider>(TaoCrypt::WindowSlider*);
-}
-#endif
 

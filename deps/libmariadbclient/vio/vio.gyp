@@ -7,6 +7,8 @@
       'includes': [ '../config/config.gypi' ],
       'sources': [
         'vio.c',
+        'viopipe.c',
+        'vioshm.c',
         'viosocket.c',
         'viossl.c',
         'viosslfactories.c',

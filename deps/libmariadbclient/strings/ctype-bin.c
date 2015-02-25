@@ -1,5 +1,6 @@
 /* Copyright (c) 2002-2007 MySQL AB & tommy@valley.ne.jp
-   Copyright (c) 2009-2011, Monty Program Ab
+   Copyright (c) 2002, 2014, Oracle and/or its affiliates.
+   Copyright (c) 2009, 2014, SkySQL Ab.
    
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -13,8 +14,8 @@
    
    You should have received a copy of the GNU Library General Public
    License along with this library; if not, write to the Free
-   Software Foundation, Inc., 59 Temple Place - Suite 330, Boston,
-   MA 02111-1307, USA */
+   Software Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+   MA 02110-1301, USA */
 
 /* This file is for binary pseudo charset, created by bar@mysql.com */
 
@@ -69,7 +70,7 @@ static const uchar bin_char_array[] =
 
 static my_bool 
 my_coll_init_8bit_bin(struct charset_info_st *cs,
-                      void *(*alloc)(size_t) __attribute__((unused)))
+                      MY_CHARSET_LOADER *loader __attribute__((unused)))
 {
   cs->max_sort_char=255; 
   return FALSE;
@@ -80,7 +81,7 @@ static int my_strnncoll_binary(CHARSET_INFO * cs __attribute__((unused)),
                                const uchar *t, size_t tlen,
                                my_bool t_is_prefix)
 {
-  size_t len=min(slen,tlen);
+  size_t len=MY_MIN(slen,tlen);
   int cmp= memcmp(s,t,len);
   return cmp ? cmp : (int)((t_is_prefix ? len : slen) - tlen);
 }
@@ -131,7 +132,7 @@ static int my_strnncoll_8bit_bin(CHARSET_INFO * cs __attribute__((unused)),
                                  const uchar *t, size_t tlen,
                                  my_bool t_is_prefix)
 {
-  size_t len=min(slen,tlen);
+  size_t len=MY_MIN(slen,tlen);
   int cmp= memcmp(s,t,len);
   return cmp ? cmp : (int)((t_is_prefix ? len : slen) - tlen);
 }
@@ -175,7 +176,7 @@ static int my_strnncollsp_8bit_bin(CHARSET_INFO * cs __attribute__((unused)),
   diff_if_only_endspace_difference= 0;
 #endif
 
-  end= a + (length= min(a_length, b_length));
+  end= a + (length= MY_MIN(a_length, b_length));
   while (a < end)
   {
     if (*a++ != *b++)
@@ -276,36 +277,39 @@ void my_hash_sort_8bit_bin(CHARSET_INFO *cs __attribute__((unused)),
                            const uchar *key, size_t len,
                            ulong *nr1, ulong *nr2)
 {
-  const uchar *pos = key;
-  
+  ulong tmp1= *nr1;
+  ulong tmp2= *nr2;
+
   /*
      Remove trailing spaces. We have to do this to be able to compare
     'A ' and 'A' as identical
   */
-  key= skip_trailing_space(key, len);
+  const uchar *end = skip_trailing_space(key, len);
 
-  for (; pos < (uchar*) key ; pos++)
+  for (; key < end ; key++)
   {
-    nr1[0]^=(ulong) ((((uint) nr1[0] & 63)+nr2[0]) * 
-	     ((uint)*pos)) + (nr1[0] << 8);
-    nr2[0]+=3;
+    MY_HASH_ADD(tmp1, tmp2, (uint) *key);
   }
+
+  *nr1= tmp1;
+  *nr2= tmp2;
 }
 
 
 void my_hash_sort_bin(CHARSET_INFO *cs __attribute__((unused)),
 		      const uchar *key, size_t len,ulong *nr1, ulong *nr2)
 {
-  const uchar *pos = key;
-  
-  key+= len;
-  
-  for (; pos < (uchar*) key ; pos++)
+  const uchar *end = key + len;
+  ulong tmp1= *nr1;
+  ulong tmp2= *nr2;
+
+  for (; key < end ; key++)
   {
-    nr1[0]^=(ulong) ((((uint) nr1[0] & 63)+nr2[0]) * 
-	     ((uint)*pos)) + (nr1[0] << 8);
-    nr2[0]+=3;
+    MY_HASH_ADD(tmp1, tmp2, (uint) *key);
   }
+
+  *nr1= tmp1;
+  *nr2= tmp2;
 }
 
 
@@ -318,13 +322,16 @@ void my_hash_sort_bin(CHARSET_INFO *cs __attribute__((unused)),
 #define INC_PTR(cs,A,B) (A)++
 
 
-int my_wildcmp_bin(CHARSET_INFO *cs,
-                   const char *str,const char *str_end,
-                   const char *wildstr,const char *wildend,
-                   int escape, int w_one, int w_many)
+static
+int my_wildcmp_bin_impl(CHARSET_INFO *cs,
+                        const char *str,const char *str_end,
+                        const char *wildstr,const char *wildend,
+                        int escape, int w_one, int w_many, int recurse_level)
 {
   int result= -1;			/* Not found, using wildcards */
-  
+
+  if (my_string_stack_guard && my_string_stack_guard(recurse_level))
+    return 1;
   while (wildstr != wildend)
   {
     while (*wildstr != w_many && *wildstr != w_one)
@@ -383,41 +390,40 @@ int my_wildcmp_bin(CHARSET_INFO *cs,
 	if (str++ == str_end)
 	  return(-1);
 	{
-	  int tmp=my_wildcmp_bin(cs,str,str_end,wildstr,wildend,escape,w_one,
-				 w_many);
+	  int tmp=my_wildcmp_bin_impl(cs,str,str_end,wildstr,wildend,escape,w_one,
+                                      w_many, recurse_level + 1);
 	  if (tmp <= 0)
 	    return(tmp);
 	}
-      } while (str != str_end && wildstr[0] != w_many);
+      } while (str != str_end);
       return(-1);
     }
   }
   return(str != str_end ? 1 : 0);
 }
 
-
-static size_t my_strnxfrm_bin(CHARSET_INFO *cs __attribute__((unused)),
-                              uchar *dest, size_t dstlen,
-                              const uchar *src, size_t srclen)
+int my_wildcmp_bin(CHARSET_INFO *cs,
+                   const char *str,const char *str_end,
+                   const char *wildstr,const char *wildend,
+                   int escape, int w_one, int w_many)
 {
-  if (dest != src)
-    memcpy(dest, src, min(dstlen,srclen));
-  if (dstlen > srclen)
-    bfill(dest + srclen, dstlen - srclen, 0);
-  return dstlen;
+  return my_wildcmp_bin_impl(cs, str, str_end,
+                             wildstr, wildend,
+                             escape, w_one, w_many, 1);
 }
 
 
-static
-size_t my_strnxfrm_8bit_bin(CHARSET_INFO *cs __attribute__((unused)),
-                            uchar *dest, size_t dstlen,
-                            const uchar *src, size_t srclen)
+static size_t
+my_strnxfrm_8bit_bin(CHARSET_INFO *cs,
+                     uchar * dst, size_t dstlen, uint nweights,
+                     const uchar *src, size_t srclen, uint flags)
 {
-  if (dest != src)
-    memcpy(dest, src, min(dstlen,srclen));
-  if (dstlen > srclen)
-    bfill(dest + srclen, dstlen - srclen, ' ');
-  return dstlen;
+  set_if_smaller(srclen, dstlen);
+  set_if_smaller(srclen, nweights);
+  if (dst != src)
+    memcpy(dst, src, srclen);
+  return my_strxfrm_pad_desc_and_reverse(cs, dst, dst + srclen, dst + dstlen,
+                                         nweights - srclen, flags, 0);
 }
 
 
@@ -503,7 +509,7 @@ static MY_COLLATION_HANDLER my_collation_binary_handler =
   NULL,			/* init */
   my_strnncoll_binary,
   my_strnncollsp_binary,
-  my_strnxfrm_bin,
+  my_strnxfrm_8bit_bin,
   my_strnxfrmlen_simple,
   my_like_range_simple,
   my_wildcmp_bin,
@@ -558,11 +564,10 @@ struct charset_info_st my_charset_bin =
     bin_char_array,		/* to_lower      */
     bin_char_array,		/* to_upper      */
     NULL,			/* sort_order    */
-    NULL,			/* contractions */
-    NULL,			/* sort_order_big*/
+    NULL,			/* uca           */
     NULL,			/* tab_to_uni    */
     NULL,			/* tab_from_uni  */
-    my_unicase_default,         /* caseinfo     */
+    &my_unicase_default,        /* caseinfo     */
     NULL,			/* state_map    */
     NULL,			/* ident_map    */
     1,				/* strxfrm_multiply */
@@ -574,6 +579,7 @@ struct charset_info_st my_charset_bin =
     255,			/* max_sort_char */
     0,                          /* pad char      */
     0,                          /* escape_with_backslash_is_dangerous */
+    1,                          /* levels_for_order   */
     &my_charset_handler,
     &my_collation_binary_handler
 };
