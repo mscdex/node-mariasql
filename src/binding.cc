@@ -15,18 +15,18 @@ using namespace v8;
 
 
 #if defined(DEBUG) && DEBUG
-# define DBG_LOG(fmt, ...)                                          \
-    do { fprintf(stderr, "DEBUG: " fmt, __VA_ARGS__); } while (0)
+# define DBG_LOG(fmt, ...)                                            \
+    do { fprintf(stderr, "DEBUG: " fmt , ##__VA_ARGS__); } while (0)
 #else
 # define DBG_LOG
 #endif
 #define FREE(p) if (p) { free(p); p = NULL; }
-#define IS_BINARY(f) ((f.flags & BINARY_FLAG) &&                    \
-                      ((f.type == MYSQL_TYPE_TINY_BLOB)   ||        \
-                       (f.type == MYSQL_TYPE_MEDIUM_BLOB) ||        \
-                       (f.type == MYSQL_TYPE_BLOB)        ||        \
-                       (f.type == MYSQL_TYPE_LONG_BLOB)   ||        \
-                       (f.type == MYSQL_TYPE_STRING)      ||        \
+#define IS_BINARY(f) ((f.flags & BINARY_FLAG) &&                      \
+                      ((f.type == MYSQL_TYPE_TINY_BLOB)   ||          \
+                       (f.type == MYSQL_TYPE_MEDIUM_BLOB) ||          \
+                       (f.type == MYSQL_TYPE_BLOB)        ||          \
+                       (f.type == MYSQL_TYPE_LONG_BLOB)   ||          \
+                       (f.type == MYSQL_TYPE_STRING)      ||          \
                        (f.type == MYSQL_TYPE_VAR_STRING)))
 #define IS_DEAD_ERRNO(v) (v == 2006 || v == 2013 || v == 2055)
 #define DEFAULT_CIPHER "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH"
@@ -87,7 +87,6 @@ using namespace v8;
   X(secureAuth)                       \
   X(multiStatements)                  \
   X(compress)                         \
-  X(metadata)                         \
   X(local_infile)                     \
   X(read_default_file)                \
   X(read_default_group)               \
@@ -110,7 +109,7 @@ static Persistent<String> context_symbol;
 static Persistent<String> conncfg_symbol;
 
 #define X(state, val)                 \
-const int STATE_##state## = ##val##;
+const int STATE_##state = val;
 STATES
 #undef X
 
@@ -262,7 +261,7 @@ class Client : public ObjectWrap {
     bool need_metadata;
     int state;
 #define X(name)  \
-    NanCallback *on##name##;
+    NanCallback *on##name;
     EVENT_NAMES
 #undef X
 
@@ -274,7 +273,7 @@ class Client : public ObjectWrap {
       initialized = false;
 
 #define X(name)  \
-      on##name## = NULL;
+      on##name = NULL;
       EVENT_NAMES
 #undef X
     }
@@ -282,8 +281,8 @@ class Client : public ObjectWrap {
     ~Client() {
       DBG_LOG("~Client()\n");
 #define X(name)       \
-      if (on##name##) \
-        delete on##name##;
+      if (on##name) \
+        delete on##name;
       EVENT_NAMES
 #undef X
       if (!context.IsEmpty())
@@ -863,8 +862,11 @@ class Client : public ObjectWrap {
       my_ulonglong affRows = mysql_affected_rows(&mysql);
       my_ulonglong insId = mysql_insert_id(&mysql);
 
-      DBG_LOG("on_resultend() state=%s,numRows=%d,affRows=%d,insId=%d\n",
-              state_strings[state], numRows, affRows, insId);
+      DBG_LOG("on_resultend() state=%s,numRows=%llu,affRows=%lld,insId=%llu\n",
+              state_strings[state],
+              numRows,
+              (affRows == (my_ulonglong)-1) ? -1 : affRows,
+              insId);
 
       Handle<Value> argv[3] = {
         NanNew<Number>(numRows),
@@ -896,7 +898,7 @@ class Client : public ObjectWrap {
       init();
 
 #define X(name)                                                                \
-      Local<Value> ##name##_v = cfg->Get(NanNew<String>(cfg_##name##_symbol));
+      Local<Value> name##_v = cfg->Get(NanNew<String>(cfg_##name##_symbol));
       CFG_OPTIONS
 #undef X
 
@@ -988,7 +990,7 @@ class Client : public ObjectWrap {
         else {
           Local<Object> ssl = ssl_v->ToObject();
 #define X(name)                                                 \
-          Local<Value> ##name##_v =                             \
+          Local<Value> name##_v =                               \
               ssl->Get(NanNew<String>(cfg_##name##_symbol));
           CFG_OPTIONS_SSL
 #undef X
@@ -1040,8 +1042,8 @@ class Client : public ObjectWrap {
 
       Local<Object> cfg = args[0]->ToObject();
 #define X(name)                                                                \
-      Local<Value> v_on##name## = cfg->Get(NanNew<String>(ev_##name##_symbol));\
-      if (!v_on##name##->IsFunction())                                         \
+      Local<Value> v_on##name = cfg->Get(NanNew<String>(ev_##name##_symbol));  \
+      if (!v_on##name->IsFunction())                                           \
         return NanThrowTypeError("Missing on" #name " handler");
       EVENT_NAMES
 #undef X
@@ -1051,7 +1053,7 @@ class Client : public ObjectWrap {
       Client *obj = new Client();
 
 #define X(name)                                                                \
-      obj->on##name## = new NanCallback(Local<Function>::Cast(v_on##name##));
+      obj->on##name = new NanCallback(Local<Function>::Cast(v_on##name));
       EVENT_NAMES
 #undef X
       if (context_v->IsObject())
