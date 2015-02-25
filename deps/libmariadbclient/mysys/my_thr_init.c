@@ -25,7 +25,7 @@
 
 pthread_key(struct st_my_thread_var*, THR_KEY_mysys);
 mysql_mutex_t THR_LOCK_malloc, THR_LOCK_open,
-              THR_LOCK_lock, THR_LOCK_isam, THR_LOCK_myisam, THR_LOCK_heap,
+              THR_LOCK_lock, THR_LOCK_myisam, THR_LOCK_heap,
               THR_LOCK_net, THR_LOCK_charset, THR_LOCK_threads,
               THR_LOCK_myisam_mmap;
 
@@ -38,22 +38,6 @@ mysql_mutex_t LOCK_localtime_r;
 #ifdef _MSC_VER
 static void install_sigabrt_handler();
 #endif
-#ifdef TARGET_OS_LINUX
-
-/*
-  Dummy thread spawned in my_thread_global_init() below to avoid
-  race conditions in NPTL pthread_exit code.
-*/
-
-static pthread_handler_t
-nptl_pthread_exit_hack_handler(void *arg __attribute((unused)))
-{
-  /* Do nothing! */
-  pthread_exit(0);
-  return 0;
-}
-
-#endif /* TARGET_OS_LINUX */
 
 
 static uint get_thread_lib(void);
@@ -73,7 +57,6 @@ static void my_thread_init_common_mutex(void)
 {
   mysql_mutex_init(key_THR_LOCK_open, &THR_LOCK_open, MY_MUTEX_INIT_FAST);
   mysql_mutex_init(key_THR_LOCK_lock, &THR_LOCK_lock, MY_MUTEX_INIT_FAST);
-  mysql_mutex_init(key_THR_LOCK_isam, &THR_LOCK_isam, MY_MUTEX_INIT_SLOW);
   mysql_mutex_init(key_THR_LOCK_myisam, &THR_LOCK_myisam, MY_MUTEX_INIT_SLOW);
   mysql_mutex_init(key_THR_LOCK_myisam_mmap, &THR_LOCK_myisam_mmap, MY_MUTEX_INIT_FAST);
   mysql_mutex_init(key_THR_LOCK_heap, &THR_LOCK_heap, MY_MUTEX_INIT_FAST);
@@ -88,7 +71,6 @@ void my_thread_destroy_common_mutex(void)
 {
   mysql_mutex_destroy(&THR_LOCK_open);
   mysql_mutex_destroy(&THR_LOCK_lock);
-  mysql_mutex_destroy(&THR_LOCK_isam);
   mysql_mutex_destroy(&THR_LOCK_myisam);
   mysql_mutex_destroy(&THR_LOCK_myisam_mmap);
   mysql_mutex_destroy(&THR_LOCK_heap);
@@ -199,33 +181,6 @@ my_bool my_thread_global_init(void)
 
   thd_lib_detected= get_thread_lib();
 
-#ifdef TARGET_OS_LINUX
-  /*
-    BUG#24507: Race conditions inside current NPTL pthread_exit()
-    implementation.
-
-    To avoid a possible segmentation fault during concurrent
-    executions of pthread_exit(), a dummy thread is spawned which
-    initializes internal variables of pthread lib. See bug description
-    for a full explanation.
-
-    TODO: Remove this code when fixed versions of glibc6 are in common
-    use.
-  */
-  if (thd_lib_detected == THD_LIB_NPTL)
-  {
-    pthread_t       dummy_thread;
-    pthread_attr_t  dummy_thread_attr;
-
-    pthread_attr_init(&dummy_thread_attr);
-    pthread_attr_setdetachstate(&dummy_thread_attr, PTHREAD_CREATE_JOINABLE);
-
-    if (pthread_create(&dummy_thread,&dummy_thread_attr,
-                       nptl_pthread_exit_hack_handler, NULL) == 0)
-      (void)pthread_join(dummy_thread, NULL);
-  }
-#endif /* TARGET_OS_LINUX */
-
   my_thread_init_common_mutex();
 
   return 0;
@@ -306,6 +261,9 @@ my_bool my_thread_init(void)
   struct st_my_thread_var *tmp;
   my_bool error=0;
 
+  if (!my_thread_global_init_done)
+    return 1; /* cannot proceed with unintialized library */
+
 #ifdef EXTRA_DEBUG_THREADS
   fprintf(stderr,"my_thread_init(): pthread_self: %p\n", pthread_self());
 #endif  
@@ -378,12 +336,16 @@ void my_thread_end(void)
     This must be done before trashing st_my_thread_var,
     because the LF_HASH depends on it.
   */
-  if (PSI_server)
-    PSI_server->delete_current_thread();
+  PSI_THREAD_CALL(delete_current_thread)();
 #endif
 
+  /*
+    We need to disable DBUG early for this thread to ensure that the
+    the mutex calls doesn't enable it again
+    To this we have to both do DBUG_POP() and also reset THR_KEY_mysys
+    as the key is used by DBUG.
+  */
   DBUG_POP();
-
   pthread_setspecific(THR_KEY_mysys,0);
 
   if (tmp && tmp->init)
@@ -420,6 +382,10 @@ struct st_my_thread_var *_my_thread_var(void)
   return  my_pthread_getspecific(struct st_my_thread_var*,THR_KEY_mysys);
 }
 
+int set_mysys_var(struct st_my_thread_var *mysys_var)
+{
+  return my_pthread_setspecific_ptr(THR_KEY_mysys, mysys_var);
+}
 
 /****************************************************************************
   Get name of current thread.
@@ -427,7 +393,12 @@ struct st_my_thread_var *_my_thread_var(void)
 
 my_thread_id my_thread_dbug_id()
 {
-  return my_thread_var->id;
+  /*
+    We need to do this test as some system thread may not yet have called
+    my_thread_init().
+  */
+  struct st_my_thread_var *tmp= my_thread_var;
+  return tmp ? tmp->id : 0;
 }
 
 #ifdef DBUG_OFF
@@ -446,7 +417,7 @@ const char *my_thread_name(void)
   {
     my_thread_id id= my_thread_dbug_id();
     sprintf(name_buff,"T@%lu", (ulong) id);
-    strmake(tmp->name,name_buff,THREAD_NAME_SIZE);
+    strmake_buf(tmp->name, name_buff);
   }
   return tmp->name;
 }

@@ -1,5 +1,5 @@
-/* Copyright (c) 2000, 2012, Oracle and/or its affiliates
-   Copyright (c) 2009, 2012, Monty Program Ab
+/* Copyright (c) 2000, 2014, Oracle and/or its affiliates.
+   Copyright (c) 2009, 2014, SkySQL Ab.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -204,11 +204,12 @@ void STDCALL mysql_server_end()
 
   mysql_client_plugin_deinit();
 
+  finish_client_errs();
+  if (mariadb_deinitialize_ssl)
+    vio_end();
 #ifdef EMBEDDED_LIBRARY
   end_embedded_server();
 #endif
-  finish_client_errs();
-  vio_end();
 
   /* If library called my_init(), free memory allocated by it */
   if (!org_my_init_done)
@@ -1139,7 +1140,7 @@ void my_net_local_init(NET *net)
   my_net_set_read_timeout(net, CLIENT_NET_READ_TIMEOUT);
   my_net_set_write_timeout(net, CLIENT_NET_WRITE_TIMEOUT);
   net->retry_count=  1;
-  net->max_packet_size= max(net_buffer_length, max_allowed_packet);
+  net->max_packet_size= MY_MAX(net_buffer_length, max_allowed_packet);
 }
 
 /*
@@ -1288,6 +1289,7 @@ static my_bool setup_one_fetch_function(MYSQL_BIND *, MYSQL_FIELD *field);
 #define RESET_LONG_DATA 2
 #define RESET_STORE_RESULT 4
 #define RESET_CLEAR_ERROR 8
+#define RESET_ALL_BUFFERS 16
 
 static my_bool reset_stmt_handle(MYSQL_STMT *stmt, uint flags);
 
@@ -1354,6 +1356,10 @@ static my_bool my_realloc_str(NET *net, ulong length)
     res= net_realloc(net, buf_length + length);
     if (res)
     {
+      if (net->last_errno == ER_OUT_OF_RESOURCES)
+        net->last_errno= CR_OUT_OF_MEMORY;
+      else if (net->last_errno == ER_NET_PACKET_TOO_LARGE)
+        net->last_errno= CR_NET_PACKET_TOO_LARGE;
       strmov(net->sqlstate, unknown_sqlstate);
       strmov(net->last_error, ER(net->last_errno));
     }
@@ -1535,8 +1541,8 @@ mysql_stmt_init(MYSQL *mysql)
     DBUG_RETURN(NULL);
   }
 
-  init_alloc_root(&stmt->mem_root, 2048, 2048);
-  init_alloc_root(&stmt->result.alloc, 4096, 4096);
+  init_alloc_root(&stmt->mem_root, 2048, 2048, MYF(MY_THREAD_SPECIFIC));
+  init_alloc_root(&stmt->result.alloc, 4096, 4096, MYF(MY_THREAD_SPECIFIC));
   stmt->result.alloc.min_malloc= sizeof(MYSQL_ROWS);
   mysql->stmts= list_add(mysql->stmts, &stmt->list);
   stmt->list.data= stmt;
@@ -1547,7 +1553,8 @@ mysql_stmt_init(MYSQL *mysql)
   strmov(stmt->sqlstate, not_error_sqlstate);
   /* The rest of statement members was bzeroed inside malloc */
 
-  init_alloc_root(&stmt->extension->fields_mem_root, 2048, 0);
+  init_alloc_root(&stmt->extension->fields_mem_root, 2048, 0,
+                  MYF(MY_THREAD_SPECIFIC));
 
   DBUG_RETURN(stmt);
 }
@@ -2097,8 +2104,8 @@ static my_bool execute(MYSQL_STMT *stmt, char *packet, ulong length)
   buff[4]= (char) stmt->flags;
   int4store(buff+5, 1);                         /* iteration count */
 
-  res= test(cli_advanced_command(mysql, COM_STMT_EXECUTE, buff, sizeof(buff),
-                                 (uchar*) packet, length, 1, stmt) ||
+  res= MY_TEST(cli_advanced_command(mysql, COM_STMT_EXECUTE, buff, sizeof(buff),
+                                    (uchar*) packet, length, 1, stmt) ||
             (*mysql->methods->read_query_result)(mysql));
   stmt->affected_rows= mysql->affected_rows;
   stmt->server_status= mysql->server_status;
@@ -2145,7 +2152,14 @@ int cli_stmt_execute(MYSQL_STMT *stmt)
       DBUG_RETURN(1);
     }
 
-    net_clear(net, 1);				/* Sets net->write_pos */
+    if (net->vio)
+      net_clear(net, 1);          /* Sets net->write_pos */
+    else
+    {
+      set_stmt_errmsg(stmt, net);
+      DBUG_RETURN(1);             
+    }
+
     /* Reserve place for null-marker bytes */
     null_count= (stmt->param_count+7) /8;
     if (my_realloc_str(net, null_count + 1))
@@ -2578,7 +2592,7 @@ int STDCALL mysql_stmt_execute(MYSQL_STMT *stmt)
     reinit_result_set_metadata(stmt);
     prepare_to_fetch_result(stmt);
   }
-  DBUG_RETURN(test(stmt->last_errno));
+  DBUG_RETURN(MY_TEST(stmt->last_errno));
 }
 
 
@@ -3194,22 +3208,24 @@ static void fetch_string_with_conversion(MYSQL_BIND *param, char *value,
   {
     double data= my_strntod(&my_charset_latin1, value, length, &endptr, &err);
     float fdata= (float) data;
-    *param->error= (fdata != data) | test(err);
+    *param->error= (fdata != data) | MY_TEST(err);
     floatstore(buffer, fdata);
     break;
   }
   case MYSQL_TYPE_DOUBLE:
   {
     double data= my_strntod(&my_charset_latin1, value, length, &endptr, &err);
-    *param->error= test(err);
+    *param->error= MY_TEST(err);
     doublestore(buffer, data);
     break;
   }
   case MYSQL_TYPE_TIME:
   {
     MYSQL_TIME *tm= (MYSQL_TIME *)buffer;
-    str_to_time(value, length, tm, TIME_FUZZY_DATE, &err);
-    *param->error= test(err);
+    MYSQL_TIME_STATUS status;
+    str_to_time(value, length, tm, 0, &status);
+    err= status.warnings;
+    *param->error= MY_TEST(err);
     break;
   }
   case MYSQL_TYPE_DATE:
@@ -3217,9 +3233,11 @@ static void fetch_string_with_conversion(MYSQL_BIND *param, char *value,
   case MYSQL_TYPE_TIMESTAMP:
   {
     MYSQL_TIME *tm= (MYSQL_TIME *)buffer;
-    (void) str_to_datetime(value, length, tm, TIME_FUZZY_DATE, &err);
-    *param->error= test(err) && (param->buffer_type == MYSQL_TYPE_DATE &&
-                                 tm->time_type != MYSQL_TIMESTAMP_DATE);
+    MYSQL_TIME_STATUS status;
+    (void) str_to_datetime(value, length, tm, 0, &status);
+    err= status.warnings;
+    *param->error= MY_TEST(err) && (param->buffer_type == MYSQL_TYPE_DATE &&
+                                    tm->time_type != MYSQL_TIMESTAMP_DATE);
     break;
   }
   case MYSQL_TYPE_TINY_BLOB:
@@ -3242,7 +3260,7 @@ static void fetch_string_with_conversion(MYSQL_BIND *param, char *value,
       copy_length= end - start;
       /* We've got some data beyond offset: copy up to buffer_length bytes */
       if (param->buffer_length)
-        memcpy(buffer, start, min(copy_length, param->buffer_length));
+        memcpy(buffer, start, MY_MIN(copy_length, param->buffer_length));
     }
     else
       copy_length= 0;
@@ -3340,10 +3358,8 @@ static void fetch_long_with_conversion(MYSQL_BIND *param, MYSQL_FIELD *field,
   case MYSQL_TYPE_DATETIME:
   {
     int error;
-    value= number_to_datetime(value, 0,
-                              (MYSQL_TIME *) buffer, TIME_FUZZY_DATE,
-                              &error);
-    *param->error= test(error);
+    value= number_to_datetime(value, 0, (MYSQL_TIME *) buffer, 0, &error);
+    *param->error= MY_TEST(error);
     break;
   }
   default:
@@ -3469,7 +3485,7 @@ static void fetch_float_with_conversion(MYSQL_BIND *param, MYSQL_FIELD *field,
     size_t len;
     if (field->decimals >= NOT_FIXED_DEC)
       len= my_gcvt(value, type,
-                   (int) min(sizeof(buff)-1, param->buffer_length),
+                   (int) MY_MIN(sizeof(buff)-1, param->buffer_length),
                    buff, NULL);
     else
       len= my_fcvt(value, (int) field->decimals, buff, NULL);
@@ -3691,7 +3707,7 @@ static void fetch_result_with_conversion(MYSQL_BIND *param, MYSQL_FIELD *field,
 static void fetch_result_tinyint(MYSQL_BIND *param, MYSQL_FIELD *field,
                                  uchar **row)
 {
-  my_bool field_is_unsigned= test(field->flags & UNSIGNED_FLAG);
+  my_bool field_is_unsigned= MY_TEST(field->flags & UNSIGNED_FLAG);
   uchar data= **row;
   *(uchar *)param->buffer= data;
   *param->error= param->is_unsigned != field_is_unsigned && data > INT_MAX8;
@@ -3701,7 +3717,7 @@ static void fetch_result_tinyint(MYSQL_BIND *param, MYSQL_FIELD *field,
 static void fetch_result_short(MYSQL_BIND *param, MYSQL_FIELD *field,
                                uchar **row)
 {
-  my_bool field_is_unsigned= test(field->flags & UNSIGNED_FLAG);
+  my_bool field_is_unsigned= MY_TEST(field->flags & UNSIGNED_FLAG);
   ushort data= (ushort) sint2korr(*row);
   shortstore(param->buffer, data);
   *param->error= param->is_unsigned != field_is_unsigned && data > INT_MAX16;
@@ -3712,7 +3728,7 @@ static void fetch_result_int32(MYSQL_BIND *param,
                                MYSQL_FIELD *field __attribute__((unused)),
                                uchar **row)
 {
-  my_bool field_is_unsigned= test(field->flags & UNSIGNED_FLAG);
+  my_bool field_is_unsigned= MY_TEST(field->flags & UNSIGNED_FLAG);
   uint32 data= (uint32) sint4korr(*row);
   longstore(param->buffer, data);
   *param->error= param->is_unsigned != field_is_unsigned && data > INT_MAX32;
@@ -3723,7 +3739,7 @@ static void fetch_result_int64(MYSQL_BIND *param,
                                MYSQL_FIELD *field __attribute__((unused)),
                                uchar **row)
 {
-  my_bool field_is_unsigned= test(field->flags & UNSIGNED_FLAG);
+  my_bool field_is_unsigned= MY_TEST(field->flags & UNSIGNED_FLAG);
   ulonglong data= (ulonglong) sint8korr(*row);
   *param->error= param->is_unsigned != field_is_unsigned && data > LONGLONG_MAX;
   longlongstore(param->buffer, data);
@@ -3779,7 +3795,7 @@ static void fetch_result_bin(MYSQL_BIND *param,
                              uchar **row)
 {
   ulong length= net_field_length(row);
-  ulong copy_length= min(length, param->buffer_length);
+  ulong copy_length= MY_MIN(length, param->buffer_length);
   memcpy(param->buffer, (char *)*row, copy_length);
   *param->length= length;
   *param->error= copy_length < length;
@@ -3791,7 +3807,7 @@ static void fetch_result_str(MYSQL_BIND *param,
                              uchar **row)
 {
   ulong length= net_field_length(row);
-  ulong copy_length= min(length, param->buffer_length);
+  ulong copy_length= MY_MIN(length, param->buffer_length);
   memcpy(param->buffer, (char *)*row, copy_length);
   /* Add an end null if there is room in the buffer */
   if (copy_length != param->buffer_length)
@@ -4620,6 +4636,14 @@ static my_bool reset_stmt_handle(MYSQL_STMT *stmt, uint flags)
             *mysql->unbuffered_fetch_owner= TRUE;
           mysql->status= MYSQL_STATUS_READY;
         }
+        if (flags & RESET_ALL_BUFFERS)
+        {
+          /* mysql_stmt_next_result will flush all pending
+             result sets 
+          */
+          while (mysql_more_results(mysql) &&
+                 mysql_stmt_next_result(stmt) == 0);
+        }
       }
       if (flags & RESET_SERVER_SIDE)
       {
@@ -4684,27 +4708,18 @@ my_bool STDCALL mysql_stmt_close(MYSQL_STMT *stmt)
   {
     mysql->stmts= list_delete(mysql->stmts, &stmt->list);
     /*
-      Clear NET error state: if the following commands come through
-      successfully, connection will still be usable for other commands.
+     Clear NET error state: if the following commands come through
+     successfully, connection will still be usable for other commands.
     */
     net_clear_error(&mysql->net);
+
     if ((int) stmt->state > (int) MYSQL_STMT_INIT_DONE)
     {
       uchar buff[MYSQL_STMT_HEADER];             /* 4 bytes - stmt id */
 
-      if (mysql->unbuffered_fetch_owner == &stmt->unbuffered_fetch_cancelled)
-        mysql->unbuffered_fetch_owner= 0;
-      if (mysql->status != MYSQL_STATUS_READY)
-      {
-        /*
-          Flush result set of the connection. If it does not belong
-          to this statement, set a warning.
-        */
-        (*mysql->methods->flush_use_result)(mysql, TRUE);
-        if (mysql->unbuffered_fetch_owner)
-          *mysql->unbuffered_fetch_owner= TRUE;
-        mysql->status= MYSQL_STATUS_READY;
-      }
+      if ((rc= reset_stmt_handle(stmt, RESET_ALL_BUFFERS | RESET_CLEAR_ERROR)))
+        return rc;
+
       int4store(buff, stmt->stmt_id);
       if ((rc= stmt_command(mysql, COM_STMT_CLOSE, buff, 4, stmt)))
       {
@@ -4716,7 +4731,7 @@ my_bool STDCALL mysql_stmt_close(MYSQL_STMT *stmt)
   my_free(stmt->extension);
   my_free(stmt);
 
-  DBUG_RETURN(test(rc));
+  DBUG_RETURN(MY_TEST(rc));
 }
 
 /*
@@ -4736,7 +4751,7 @@ my_bool STDCALL mysql_stmt_reset(MYSQL_STMT *stmt)
   /* Reset the client and server sides of the prepared statement */
   DBUG_RETURN(reset_stmt_handle(stmt,
                                 RESET_SERVER_SIDE | RESET_LONG_DATA |
-                                RESET_CLEAR_ERROR));
+                                RESET_ALL_BUFFERS | RESET_CLEAR_ERROR));
 }
 
 /*
@@ -4847,7 +4862,6 @@ int STDCALL mysql_next_result(MYSQL *mysql)
 
   DBUG_RETURN(-1);				/* No more results */
 }
-
 
 int STDCALL mysql_stmt_next_result(MYSQL_STMT *stmt)
 {

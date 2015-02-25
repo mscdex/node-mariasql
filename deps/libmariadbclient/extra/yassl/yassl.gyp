@@ -24,6 +24,7 @@
         'include',
         'taocrypt/include',
         'taocrypt/mySTL',
+        '../../include',
       ],
     },
   ],

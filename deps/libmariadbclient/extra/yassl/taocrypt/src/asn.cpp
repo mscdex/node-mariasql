@@ -1,6 +1,5 @@
 /*
-   Copyright (c) 2005, 2012, Oracle and/or its affiliates. All rights reserved.
-   Use is subject to license terms.
+   Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -33,9 +32,54 @@
 #include "coding.hpp"
 #include <time.h>     // gmtime();
 #include "memory.hpp" // some auto_ptr don't have reset, also need auto_array
-
+#include <assert.h>
 
 namespace TaoCrypt {
+
+// like atoi but only use first byte
+word32 btoi(byte b)
+{
+    return b - 0x30;
+}
+
+
+// two byte date/time, add to value
+void GetTime(int *value, const byte* date, int& i)
+{
+    *value += btoi(date[i++]) * 10;
+    *value += btoi(date[i++]);
+}
+
+
+void ASN1_TIME_extract(const unsigned char* date, unsigned char format,
+                       tm *t)
+{
+  int i = 0;
+  memset(t, 0, sizeof (tm));
+
+  assert(format == UTC_TIME || format == GENERALIZED_TIME);
+
+  if (format == UTC_TIME) {
+    if (btoi(date[0]) >= 5)
+      t->tm_year = 1900;
+    else
+      t->tm_year = 2000;
+  }
+  else  { // format == GENERALIZED_TIME
+    t->tm_year += btoi(date[i++]) * 1000;
+    t->tm_year += btoi(date[i++]) * 100;
+  }
+
+  GetTime(&t->tm_year, date, i);     t->tm_year -= 1900; // adjust
+  GetTime(&t->tm_mon,  date, i);     t->tm_mon  -= 1;    // adjust
+  GetTime(&t->tm_mday, date, i);
+  GetTime(&t->tm_hour, date, i);
+  GetTime(&t->tm_min,  date, i);
+  GetTime(&t->tm_sec,  date, i);
+
+  assert(date[i] == 'Z');     // only Zulu supported for this profile
+}
+
 
 namespace { // locals
 
@@ -71,51 +115,14 @@ bool operator<(tm& a, tm&b)
 }
 
 
-// like atoi but only use first byte
-word32 btoi(byte b)
-{
-    return b - 0x30;
-}
-
-
-// two byte date/time, add to value
-void GetTime(int& value, const byte* date, int& i)
-{
-    value += btoi(date[i++]) * 10;
-    value += btoi(date[i++]);
-}
-
-
 // Make sure before and after dates are valid
 bool ValidateDate(const byte* date, byte format, CertDecoder::DateType dt)
 {
     tm certTime;
-    memset(&certTime, 0, sizeof(certTime));
-    int i = 0;
-
-    if (format == UTC_TIME) {
-        if (btoi(date[0]) >= 5)
-            certTime.tm_year = 1900;
-        else
-            certTime.tm_year = 2000;
-    }
-    else  { // format == GENERALIZED_TIME
-        certTime.tm_year += btoi(date[i++]) * 1000;
-        certTime.tm_year += btoi(date[i++]) * 100;
-    }
-
-    GetTime(certTime.tm_year, date, i);     certTime.tm_year -= 1900; // adjust
-    GetTime(certTime.tm_mon,  date, i);     certTime.tm_mon  -= 1;    // adjust
-    GetTime(certTime.tm_mday, date, i);
-    GetTime(certTime.tm_hour, date, i); 
-    GetTime(certTime.tm_min,  date, i); 
-    GetTime(certTime.tm_sec,  date, i); 
-
-    if (date[i] != 'Z')     // only Zulu supported for this profile
-        return false;
-
     time_t ltime = time(0);
     tm* localTime = gmtime(&ltime);
+
+    ASN1_TIME_extract(date, format, &certTime);
 
     if (dt == CertDecoder::BEFORE) {
         if (*localTime < certTime)
@@ -761,7 +768,7 @@ void CertDecoder::GetName(NameType nt)
     while (source_.get_index() < length) {
         GetSet();
         if (source_.GetError().What() == SET_E) {
-            source_.SetError(NO_ERROR_E);  // extensions may only have sequence
+            source_.SetError(NO_ERROR_E);  // extensions may only have sequence 
             source_.prev();
         }
         GetSequence();
@@ -832,10 +839,8 @@ void CertDecoder::GetName(NameType nt)
             if (source_.IsLeft(length) == false) return;
 
             if (email) {
-                if (!(ptr = AddTag(ptr, buf_end, "/emailAddress=", 14, length))) {
-                    source_.SetError(CONTENT_E);
-                    return;
-                }
+                if (!(ptr = AddTag(ptr, buf_end, "/emailAddress=", 14, length)))
+                    return; 
             }
 
             source_.advance(length);
@@ -885,10 +890,12 @@ void CertDecoder::GetDate(DateType dt)
     if (dt == BEFORE) {
         memcpy(beforeDate_, date, length);
         beforeDate_[length] = 0;
+        beforeDateType_= b;
     }
     else {  // after
         memcpy(afterDate_, date, length);
         afterDate_[length] = 0;
+        afterDateType_= b;
     }       
 }
 
@@ -972,12 +979,26 @@ bool CertDecoder::ConfirmSignature(Source& pub)
         hasher.reset(NEW_TC SHA);
         ht = SHAh;
     }
+    else if (signatureOID_ == SHA256wRSA || signatureOID_ == SHA256wDSA) {
+        hasher.reset(NEW_TC SHA256);
+        ht = SHA256h;
+    }
+#ifdef WORD64_AVAILABLE
+    else if (signatureOID_ == SHA384wRSA) {
+        hasher.reset(NEW_TC SHA384);
+        ht = SHA384h;
+    }
+    else if (signatureOID_ == SHA512wRSA) {
+        hasher.reset(NEW_TC SHA512);
+        ht = SHA512h;
+    }
+#endif
     else {
         source_.SetError(UNKOWN_SIG_E);
         return false;
     }
 
-    byte digest[SHA::DIGEST_SIZE];      // largest size
+    byte digest[MAX_SHA2_DIGEST_SIZE];      // largest size
 
     hasher->Update(source_.get_buffer() + certBegin_, sigIndex_ - certBegin_);
     hasher->Final(digest);
@@ -1050,6 +1071,12 @@ word32 DER_Encoder::SetAlgoID(HashType aOID, byte* output)
                                       0x02, 0x05, 0x05, 0x00  };
     static const byte md2AlgoID[] = { 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d,
                                       0x02, 0x02, 0x05, 0x00};
+    static const byte sha256AlgoID[] = { 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+                                         0x04, 0x02, 0x01, 0x05, 0x00 };
+    static const byte sha384AlgoID[] = { 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+                                         0x04, 0x02, 0x02, 0x05, 0x00 };
+    static const byte sha512AlgoID[] = { 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+                                         0x04, 0x02, 0x03, 0x05, 0x00 };
 
     int algoSz = 0;
     const byte* algoName = 0;
@@ -1058,6 +1085,21 @@ word32 DER_Encoder::SetAlgoID(HashType aOID, byte* output)
     case SHAh:
         algoSz = sizeof(shaAlgoID);
         algoName = shaAlgoID;
+        break;
+
+    case SHA256h:
+        algoSz = sizeof(sha256AlgoID);
+        algoName = sha256AlgoID;
+        break;
+
+    case SHA384h:
+        algoSz = sizeof(sha384AlgoID);
+        algoName = sha384AlgoID;
+        break;
+
+    case SHA512h:
+        algoSz = sizeof(sha512AlgoID);
+        algoName = sha512AlgoID;
         break;
 
     case MD2h:

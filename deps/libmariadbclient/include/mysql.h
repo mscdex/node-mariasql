@@ -1,5 +1,6 @@
 /*
-   Copyright (c) 2000, 2011, Oracle and/or its affiliates.
+   Copyright (c) 2000, 2012, Oracle and/or its affiliates.
+   Copyright (c) 2012, Monty Program Ab.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -43,7 +44,7 @@
 extern "C" {
 #endif
 
-#ifndef _global_h				/* If not standard header */
+#ifndef MY_GLOBAL_INCLUDED				/* If not standard header */
 #ifndef MYSQL_ABI_CHECK
 #include <sys/types.h>
 #endif
@@ -66,7 +67,7 @@ typedef char my_bool;
 typedef int my_socket;
 #endif /* _WIN64 */
 #endif /* my_socket_defined */
-#endif /* _global_h */
+#endif /* MY_GLOBAL_INCLUDED */
 
 #include "mysql_version.h"
 #include "mysql_com.h"
@@ -74,6 +75,7 @@ typedef int my_socket;
 
 #include "my_list.h" /* for LISTs used in 'MYSQL' and 'MYSQL_STMT' */
 
+extern unsigned int mariadb_deinitialize_ssl;
 extern unsigned int mysql_port;
 extern char *mysql_unix_port;
 
@@ -118,7 +120,7 @@ typedef struct st_mysql_field {
 typedef char **MYSQL_ROW;		/* return data as array of strings */
 typedef unsigned int MYSQL_FIELD_OFFSET; /* offset to current field */
 
-#ifndef _global_h
+#ifndef MY_GLOBAL_INCLUDED
 #if defined(NO_CLIENT_LONG_LONG)
 typedef unsigned long my_ulonglong;
 #elif defined (__WIN__)
@@ -134,6 +136,7 @@ typedef unsigned long long my_ulonglong;
 
 /* backward compatibility define - to be removed eventually */
 #define ER_WARN_DATA_TRUNCATED WARN_DATA_TRUNCATED
+#define WARN_PLUGIN_DELETE_BUILTIN ER_PLUGIN_DELETE_BUILTIN
 
 typedef struct st_mysql_rows {
   struct st_mysql_rows *next;		/* list of rows */
@@ -167,9 +170,20 @@ enum mysql_option
   MYSQL_OPT_GUESS_CONNECTION, MYSQL_SET_CLIENT_IP, MYSQL_SECURE_AUTH,
   MYSQL_REPORT_DATA_TRUNCATION, MYSQL_OPT_RECONNECT,
   MYSQL_OPT_SSL_VERIFY_SERVER_CERT, MYSQL_PLUGIN_DIR, MYSQL_DEFAULT_AUTH,
-  MYSQL_PROGRESS_CALLBACK,
+  MYSQL_OPT_BIND,
+  MYSQL_OPT_SSL_KEY, MYSQL_OPT_SSL_CERT, 
+  MYSQL_OPT_SSL_CA, MYSQL_OPT_SSL_CAPATH, MYSQL_OPT_SSL_CIPHER,
+  MYSQL_OPT_SSL_CRL, MYSQL_OPT_SSL_CRLPATH,
+  MYSQL_OPT_CONNECT_ATTR_RESET, MYSQL_OPT_CONNECT_ATTR_ADD,
+  MYSQL_OPT_CONNECT_ATTR_DELETE,
+  MYSQL_SERVER_PUBLIC_KEY,
+  MYSQL_ENABLE_CLEARTEXT_PLUGIN,
+  MYSQL_OPT_CAN_HANDLE_EXPIRED_PASSWORDS,
+
   /* MariaDB options */
-  MYSQL_OPT_NONBLOCK=6000
+  MYSQL_PROGRESS_CALLBACK=5999,
+  MYSQL_OPT_NONBLOCK,
+  MYSQL_OPT_USE_THREAD_SPECIFIC_MEMORY
 };
 
 /**
@@ -194,7 +208,7 @@ struct st_mysql_options {
   unsigned long max_allowed_packet;
   my_bool use_ssl;				/* if to use SSL or not */
   my_bool compress,named_pipe;
-  my_bool unused1;
+  my_bool use_thread_specific_memory;
   my_bool unused2;
   my_bool unused3;
   my_bool unused4;
@@ -544,6 +558,8 @@ int             STDCALL mysql_list_processes_cont(MYSQL_RES **ret, MYSQL *mysql,
                                                   int status);
 int		STDCALL mysql_options(MYSQL *mysql,enum mysql_option option,
 				      const void *arg);
+int             STDCALL mysql_options4(MYSQL *mysql,enum mysql_option option,
+                                       const void *arg1, const void *arg2);
 void		STDCALL mysql_free_result(MYSQL_RES *result);
 int             STDCALL mysql_free_result_start(MYSQL_RES *result);
 int             STDCALL mysql_free_result_cont(MYSQL_RES *result, int status);

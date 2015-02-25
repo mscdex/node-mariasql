@@ -1,6 +1,5 @@
 /*
-   Copyright (c) 2005-2007 MySQL AB, 2010 Sun Microsystems, Inc.
-   Use is subject to license terms.
+   Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -33,7 +32,7 @@
 #else
     #include "list.hpp"
 #endif
-
+#include <time.h>
 
 namespace STL = STL_NAMESPACE;
 
@@ -112,7 +111,7 @@ enum Constants
     MAX_LENGTH_SZ =  5,    
     MAX_SEQ_SZ    =  5,    // enum(seq|con) + length(4)
     MAX_ALGO_SIZE =  9,
-    MAX_DIGEST_SZ = 25,    // SHA + enum(Bit or Octet) + length(4)
+    MAX_DIGEST_SZ = 69,    // SHA512 + enum(Bit or Octet) + length(4)
     DSA_SIG_SZ    = 40,
     ASN_NAME_MAX  = 512    // max total of all included names
 };
@@ -258,8 +257,11 @@ typedef STL::list<Signer*> SignerList;
 
 
 enum ContentType { HUH = 651 };
-enum SigType  { SHAwDSA = 517, MD2wRSA = 646, MD5wRSA = 648, SHAwRSA =649};
-enum HashType { MD2h = 646, MD5h = 649, SHAh = 88 };
+enum SigType  { SHAwDSA = 517, MD2wRSA = 646, MD5wRSA = 648, SHAwRSA = 649,
+                SHA256wRSA = 655, SHA384wRSA = 656, SHA512wRSA = 657,
+                SHA256wDSA = 416 };
+enum HashType { MD2h = 646, MD5h = 649, SHAh = 88, SHA256h = 414, SHA384h = 415,
+                SHA512h = 416 };
 enum KeyType  { DSAk = 515, RSAk = 645 };     // sums of algo OID
 
 
@@ -280,7 +282,9 @@ public:
     const char*      GetCommonName() const { return subject_; }
     const byte*      GetHash()       const { return subjectHash_; }
     const char*      GetBeforeDate() const { return beforeDate_; }
+    byte             GetBeforeDateType() const { return beforeDateType_; }
     const char*      GetAfterDate()  const { return afterDate_; }
+    byte             GetAfterDateType() const { return afterDateType_; }
 
     void DecodeToKey();
 private:
@@ -295,9 +299,11 @@ private:
     byte*     signature_;
     char      issuer_[ASN_NAME_MAX];    // Names
     char      subject_[ASN_NAME_MAX];   // Names
-    char      beforeDate_[MAX_DATE_SZ]; // valid before date
-    char      afterDate_[MAX_DATE_SZ];  // valid after date
-    bool      verify_;                  // Default to yes, but could be off
+    char      beforeDate_[MAX_DATE_SZ+1]; // valid before date, +null term
+    byte      beforeDateType_;          // beforeDate time type
+    char      afterDate_[MAX_DATE_SZ+1];  // valid after date, +null term
+    byte      afterDateType_;           // afterDate time type
+    bool      verify_;                    // Default to yes, but could be off
 
     void   ReadHeader();
     void   Decode(SignerList*, CertType);
@@ -368,6 +374,9 @@ int GetCert(Source&);
 
 // Get Cert in PEM format from pkcs12 file
 int GetPKCS_Cert(const char* password, Source&);
+
+void ASN1_TIME_extract(const unsigned char* date, unsigned char format,
+                       tm *parsed_time);
 
 } // namespace
 

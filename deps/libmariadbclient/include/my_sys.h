@@ -1,4 +1,5 @@
-/* Copyright (C) 2000-2003 MySQL AB
+/* Copyright (c) 2000, 2013, Oracle and/or its affiliates.
+   Copyright (c) 2010, 2013, Monty Program Ab.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 #ifndef _my_sys_h
 #define _my_sys_h
@@ -52,6 +53,7 @@ typedef struct my_aio_result {
   area, and we would like to avoid unexpected truncation.
 */
 #define MYSYS_ERRMSG_SIZE   (512)
+#define MYSYS_STRERROR_SIZE (128)
 
 #define MY_FILE_ERROR	((size_t) -1)
 
@@ -85,6 +87,10 @@ typedef struct my_aio_result {
 #define MY_SYNC       4096      /* my_copy(): sync dst file */
 #define MY_SYNC_DIR   32768     /* my_create/delete/rename: sync directory */
 #define MY_SYNC_FILESIZE 65536  /* my_sync(): safe sync when file is extended */
+#define MY_THREAD_SPECIFIC 0x10000  /* my_malloc(): thread specific */
+#define MY_THREAD_MOVE     0x20000  /* realloc(); Memory can move */
+/* Tree that should delete things automaticly */ 
+#define MY_TREE_WITH_DELETE 0x40000
 
 #define MY_CHECK_ERROR	1	/* Params to my_end; Check open-close */
 #define MY_GIVE_INFO	2	/* Give time info about process*/
@@ -147,6 +153,18 @@ typedef struct my_aio_result {
 /* Extra length needed for filename if one calls my_create_backup_name */
 #define MY_BACKUP_NAME_EXTRA_LENGTH 17
 
+/* If we have our own safemalloc (for debugging) */
+#if defined(SAFEMALLOC)
+void sf_report_leaked_memory(my_thread_id id);
+extern my_thread_id (*sf_malloc_dbug_id)(void);
+#define SAFEMALLOC_REPORT_MEMORY(X) sf_report_leaked_memory(X)
+#else
+#define SAFEMALLOC_REPORT_MEMORY(X) do {} while(0)
+#endif
+
+typedef void (*MALLOC_SIZE_CB) (long long size, my_bool is_thread_specific); 
+extern void set_malloc_size_cb(MALLOC_SIZE_CB func);
+
 	/* defines when allocating data */
 extern void *my_malloc(size_t Size,myf MyFlags);
 extern void *my_multi_malloc(myf MyFlags, ...);
@@ -155,8 +173,6 @@ extern void my_free(void *ptr);
 extern void *my_memdup(const void *from,size_t length,myf MyFlags);
 extern char *my_strdup(const char *from,myf MyFlags);
 extern char *my_strndup(const char *from, size_t length, myf MyFlags);
-
-extern int sf_leaking_memory; /* set to 1 to disable memleak detection */
 
 #ifdef HAVE_LARGE_PAGES
 extern uint my_get_large_page_size(void);
@@ -181,13 +197,17 @@ extern void my_large_free(uchar *ptr);
 #endif /* GNUC */
 #define my_alloca(SZ) alloca((size_t) (SZ))
 #define my_afree(PTR) ((void)0)
+#define my_safe_alloca(size, max_alloca_sz) ((size <= max_alloca_sz) ? \
+                                             my_alloca(size) : \
+                                             my_malloc(size, MYF(0)))
+#define my_safe_afree(ptr, size, max_alloca_sz) if (size > max_alloca_sz) \
+                                               my_free(ptr)
 #else
 #define my_alloca(SZ) my_malloc(SZ,MYF(MY_FAE))
 #define my_afree(PTR) my_free(PTR)
+#define my_safe_alloca(size, max_alloca_sz) my_alloca(size)
+#define my_safe_afree(ptr, size, max_alloca_sz) my_afree(ptr)
 #endif /* HAVE_ALLOCA */
-
-#define my_safe_alloca(size, min_length) ((size <= min_length) ? my_alloca(size) : my_malloc(size,MYF(MY_FAE)))
-#define my_safe_afree(ptr, size, min_length) ((size <= min_length) ? my_afree(ptr) : my_free(ptr))
 
 #ifndef errno				/* did we already get it? */
 #ifdef HAVE_ERRNO_AS_DEFINE
@@ -197,6 +217,7 @@ extern int errno;			/* declare errno */
 #endif
 #endif					/* #ifndef errno */
 extern char *home_dir;			/* Home directory for user */
+extern MYSQL_PLUGIN_IMPORT char  *mysql_data_home;
 extern const char *my_progname;		/* program-name (printed in errors) */
 extern const char *my_progname_short;	/* like above but without directory */
 extern char curr_dir[];		/* Current directory for user */
@@ -205,9 +226,10 @@ extern void (*fatal_error_handler_hook)(uint my_err, const char *str,
 				       myf MyFlags);
 extern uint my_file_limit;
 extern ulonglong my_thread_stack_size;
+extern int sf_leaking_memory; /* set to 1 to disable memleak detection */
 
-extern const char *(*proc_info_hook)(MYSQL_THD, const char *, const char *,
-                                     const char *, const unsigned int);
+extern void (*proc_info_hook)(void *, const PSI_stage_info *, PSI_stage_info *,
+                              const char *, const char *, const unsigned int);
 
 #ifdef HAVE_LARGE_PAGES
 extern my_bool my_use_large_pages;
@@ -219,6 +241,11 @@ extern uint    my_large_page_size;
 extern MYSQL_PLUGIN_IMPORT CHARSET_INFO *default_charset_info;
 extern MYSQL_PLUGIN_IMPORT CHARSET_INFO *all_charsets[MY_ALL_CHARSETS_SIZE];
 extern struct charset_info_st compiled_charsets[];
+
+/* Collation properties and use statistics */
+extern my_bool my_collation_is_known_id(uint id);
+extern ulonglong my_collation_statistics_get_use_count(uint id);
+extern const char *my_collation_get_tailoring(uint id);
 
 /* statistics */
 extern ulong	my_file_opened,my_stream_opened, my_tmp_file_created;
@@ -247,18 +274,7 @@ extern my_bool  my_disable_locking, my_disable_async_io,
 extern my_bool my_disable_sync;
 extern char	wild_many,wild_one,wild_prefix;
 extern const char *charsets_dir;
-/* from default.c */
-extern const char *my_defaults_extra_file;
-extern const char *my_defaults_group_suffix;
-extern const char *my_defaults_file;
-
 extern my_bool timed_mutexes;
-
-enum loglevel {
-   ERROR_LEVEL,
-   WARNING_LEVEL,
-   INFORMATION_LEVEL
-};
 
 enum cache_type
 {
@@ -316,12 +332,16 @@ struct st_my_file_info
 
 extern struct st_my_file_info *my_file_info;
 
+/* Free function pointer */
+typedef void (*FREE_FUNC)(void *);
+
 typedef struct st_dynamic_array
 {
   uchar *buffer;
   uint elements,max_element;
   uint alloc_increment;
   uint size_of_element;
+  myf malloc_flags;
 } DYNAMIC_ARRAY;
 
 typedef struct st_my_tmpdir
@@ -488,6 +508,11 @@ typedef struct st_io_cache		/* Used when cacheing files */
 
 typedef int (*qsort2_cmp)(const void *, const void *, const void *);
 
+typedef void (*my_error_reporter)(enum loglevel level, const char *format, ...)
+  ATTRIBUTE_FORMAT_FPTR(printf, 2, 3);
+
+extern my_error_reporter my_charset_error_reporter;
+
 	/* defines for mf_iocache */
 
 	/* Test if buffer is inited */
@@ -542,12 +567,7 @@ my_off_t my_b_safe_tell(IO_CACHE* info); /* picks the correct tell() */
 typedef uint32 ha_checksum;
 extern ulong my_crc_dbug_check;
 
-/* Define the type of function to be passed to process_default_option_files */
-typedef int (*Process_option_func)(void *ctx, const char *group_name,
-                                   const char *option);
-
 #include <my_alloc.h>
-
 
 	/* Prototypes for mysys and my_func functions */
 
@@ -607,12 +627,12 @@ extern int      my_access(const char *path, int amode);
 extern int check_if_legal_filename(const char *path);
 extern int check_if_legal_tablename(const char *path);
 
-#ifdef _WIN32
-extern int nt_share_delete(const char *name,myf MyFlags);
-#define my_delete_allow_opened(fname,flags)  nt_share_delete((fname),(flags))
-#else
-#define my_delete_allow_opened(fname,flags)  my_delete((fname),(flags))
-#endif
+#ifdef __WIN__
+extern my_bool is_filename_allowed(const char *name, size_t length,
+                   my_bool allow_current_dir);
+#else /* __WIN__ */
+# define is_filename_allowed(name, length, allow_cwd) (TRUE)
+#endif /* __WIN__ */ 
 
 #ifdef _WIN32
 /* Windows-only functions (CRT equivalents)*/
@@ -628,6 +648,7 @@ extern FILE *my_fdopen(File Filedes,const char *name, int Flags,myf MyFlags);
 extern FILE *my_freopen(const char *path, const char *mode, FILE *stream);
 extern int my_fclose(FILE *fd,myf MyFlags);
 extern int my_vfprintf(FILE *stream, const char* format, va_list args);
+extern void my_strerror(char *buf, size_t len, int nr);
 extern int my_fprintf(FILE *stream, const char* format, ...);
 extern File my_fileno(FILE *fd);
 extern int my_chsize(File fd,my_off_t newlength, int filler, myf MyFlags);
@@ -638,15 +659,16 @@ extern void thr_set_sync_wait_callback(void (*before_sync)(void),
 extern int my_sync(File fd, myf my_flags);
 extern int my_sync_dir(const char *dir_name, myf my_flags);
 extern int my_sync_dir_by_file(const char *file_name, myf my_flags);
-extern void my_error(int nr,myf MyFlags, ...);
+extern const char *my_get_err_msg(uint nr);
+extern void my_error(uint nr,myf MyFlags, ...);
 extern void my_printf_error(uint my_err, const char *format,
                             myf MyFlags, ...)
                             ATTRIBUTE_FORMAT(printf, 2, 4);
 extern void my_printv_error(uint error, const char *format, myf MyFlags,
                             va_list ap);
 extern int my_error_register(const char** (*get_errmsgs) (),
-                             int first, int last);
-extern const char **my_error_unregister(int first, int last);
+                             uint first, uint last);
+extern const char **my_error_unregister(uint first, uint last);
 extern void my_message(uint my_err, const char *str,myf MyFlags);
 extern void my_message_stderr(uint my_err, const char *str, myf MyFlags);
 extern my_bool my_init(void);
@@ -677,6 +699,7 @@ extern my_bool has_path(const char *name);
 extern char *convert_dirname(char *to, const char *from, const char *from_end);
 extern void to_unix_path(char * name);
 extern char * fn_ext(const char *name);
+extern char * fn_ext2(const char *name);
 extern char * fn_same(char * toname,const char *name,int flag);
 extern char * fn_format(char * to,const char *name,const char *dir,
 			   const char *form, uint flag);
@@ -688,7 +711,6 @@ extern size_t cleanup_dirname(char * to,const char *from);
 extern size_t system_filename(char * to,const char *from);
 extern size_t unpack_filename(char * to,const char *from);
 extern char * intern_filename(char * to,const char *from);
-extern char * directory_file_name(char * dst, const char *src);
 extern int pack_filename(char * to, const char *name, size_t max_length);
 extern char * my_path(char * to,const char *progname,
 			 const char *own_pathname_part);
@@ -712,6 +734,7 @@ extern int flush_write_cache(RECORD_CACHE *info);
 extern void handle_recived_signals(void);
 
 extern sig_handler my_set_alarm_variable(int signo);
+extern my_bool radixsort_is_appliccable(uint n_items, size_t size_of_element);
 extern void my_string_ptr_sort(uchar *base,uint items,size_t size);
 extern void radixsort_for_str_ptr(uchar* base[], uint number_of_elements,
 				  size_t size_of_element,uchar *buffer[]);
@@ -764,26 +787,23 @@ extern my_bool real_open_cached_file(IO_CACHE *cache);
 extern void close_cached_file(IO_CACHE *cache);
 File create_temp_file(char *to, const char *dir, const char *pfx,
 		      int mode, myf MyFlags);
-#define my_init_dynamic_array(A,B,C,D) init_dynamic_array2(A,B,NULL,C,D)
-#define my_init_dynamic_array_ci(A,B,C,D) init_dynamic_array2(A,B,NULL,C,D)
-#define my_init_dynamic_array2(A,B,C,D,E) init_dynamic_array2(A,B,C,D,E)
-#define my_init_dynamic_array2_ci(A,B,C,D,E) init_dynamic_array2(A,B,C,D,E)
+#define my_init_dynamic_array(A,B,C,D,E) init_dynamic_array2(A,B,NULL,C,D,E)
+#define my_init_dynamic_array2(A,B,C,D,E,F) init_dynamic_array2(A,B,C,D,E,F)
 extern my_bool init_dynamic_array2(DYNAMIC_ARRAY *array, uint element_size,
                                    void *init_buffer, uint init_alloc,
-                                   uint alloc_increment);
-/* init_dynamic_array() function is deprecated */
-extern my_bool init_dynamic_array(DYNAMIC_ARRAY *array, uint element_size,
-                                  uint init_alloc, uint alloc_increment);
-extern my_bool insert_dynamic(DYNAMIC_ARRAY *array, const uchar * element);
-extern uchar *alloc_dynamic(DYNAMIC_ARRAY *array);
-extern uchar *pop_dynamic(DYNAMIC_ARRAY*);
-extern my_bool set_dynamic(DYNAMIC_ARRAY *array,uchar * element,uint array_index);
+                                   uint alloc_increment, myf my_flags);
+extern my_bool insert_dynamic(DYNAMIC_ARRAY *array, const void* element);
+extern void *alloc_dynamic(DYNAMIC_ARRAY *array);
+extern void *pop_dynamic(DYNAMIC_ARRAY*);
+extern my_bool set_dynamic(DYNAMIC_ARRAY *array, const void *element,
+                           uint array_index);
 extern my_bool allocate_dynamic(DYNAMIC_ARRAY *array, uint max_elements);
-extern void get_dynamic(DYNAMIC_ARRAY *array,uchar * element,uint array_index);
+extern void get_dynamic(DYNAMIC_ARRAY *array, void *element, uint array_index);
 extern void delete_dynamic(DYNAMIC_ARRAY *array);
 extern void delete_dynamic_element(DYNAMIC_ARRAY *array, uint array_index);
+extern void delete_dynamic_with_callback(DYNAMIC_ARRAY *array, FREE_FUNC f);
 extern void freeze_size(DYNAMIC_ARRAY *array);
-extern int  get_index_dynamic(DYNAMIC_ARRAY *array, uchar * element);
+extern int  get_index_dynamic(DYNAMIC_ARRAY *array, void *element);
 #define dynamic_array_ptr(array,array_index) ((array)->buffer+(array_index)*(array)->size_of_element)
 #define dynamic_element(array,array_index,type) ((type)((array)->buffer) +(array_index))
 #define push_dynamic(A,B) insert_dynamic((A),(B))
@@ -797,12 +817,23 @@ my_bool dynstr_append_mem(DYNAMIC_STRING *str, const char *append,
 			  size_t length);
 extern my_bool dynstr_append_os_quoted(DYNAMIC_STRING *str, const char *append,
                                        ...);
+extern my_bool dynstr_append_quoted(DYNAMIC_STRING *str,
+                                    const char *append, size_t len,
+                                    char quote);
 extern my_bool dynstr_set(DYNAMIC_STRING *str, const char *init_str);
 extern my_bool dynstr_realloc(DYNAMIC_STRING *str, size_t additional_size);
 extern my_bool dynstr_trunc(DYNAMIC_STRING *str, size_t n);
 extern void dynstr_free(DYNAMIC_STRING *str);
+extern uint32 copy_and_convert_extended(char *to, uint32 to_length,
+                                        CHARSET_INFO *to_cs,
+                                        const char *from, uint32 from_length,
+                                        CHARSET_INFO *from_cs, uint *errors);
 extern void dynstr_reassociate(DYNAMIC_STRING *str, char **res, size_t *length,
                                size_t *alloc_length);
+extern uint32 copy_and_convert_extended(char *to, uint32 to_length,
+                                        CHARSET_INFO *to_cs,
+                                        const char *from, uint32 from_length,
+                                        CHARSET_INFO *from_cs, uint *errors);
 #ifdef HAVE_MLOCK
 extern void *my_malloc_lock(size_t length,myf flags);
 extern void my_free_lock(void *ptr);
@@ -814,7 +845,7 @@ extern void my_free_lock(void *ptr);
 #define ALLOC_ROOT_MIN_BLOCK_SIZE (MALLOC_OVERHEAD + sizeof(USED_MEM) + 8)
 #define clear_alloc_root(A) do { (A)->free= (A)->used= (A)->pre_alloc= 0; (A)->min_malloc=0;} while(0)
 extern void init_alloc_root(MEM_ROOT *mem_root, size_t block_size,
-			    size_t pre_alloc_size);
+			    size_t pre_alloc_size, myf my_flags);
 extern void *alloc_root(MEM_ROOT *mem_root, size_t Size);
 extern void *multi_alloc_root(MEM_ROOT *mem_root, ...);
 extern void free_root(MEM_ROOT *root, myf MyFLAGS);
@@ -828,22 +859,6 @@ static inline char *safe_strdup_root(MEM_ROOT *root, const char *str)
 }
 extern char *strmake_root(MEM_ROOT *root,const char *str,size_t len);
 extern void *memdup_root(MEM_ROOT *root,const void *str, size_t len);
-extern int get_defaults_options(int argc, char **argv,
-                                char **defaults, char **extra_defaults,
-                                char **group_suffix);
-extern my_bool my_getopt_use_args_separator;
-extern my_bool my_getopt_is_args_separator(const char* arg);
-extern int my_load_defaults(const char *conf_file, const char **groups,
-                            int *argc, char ***argv, const char ***);
-extern int load_defaults(const char *conf_file, const char **groups,
-                         int *argc, char ***argv);
-extern int my_search_option_files(const char *conf_file, int *argc,
-                                  char ***argv, uint *args_used,
-                                  Process_option_func func, void *func_ctx,
-                                  const char **default_directories);
-extern void free_defaults(char **argv);
-extern void my_print_default_files(const char *conf_file);
-extern void print_defaults(const char *conf_file, const char **groups);
 extern my_bool my_compress(uchar *, size_t *, size_t *);
 extern my_bool my_uncompress(uchar *, size_t , size_t *);
 extern uchar *my_compress_alloc(const uchar *packet, size_t *len,
@@ -852,7 +867,7 @@ extern void *my_az_allocator(void *dummy, unsigned int items, unsigned int size)
 extern void my_az_free(void *dummy, void *address);
 extern int my_compress_buffer(uchar *dest, size_t *destLen,
                               const uchar *source, size_t sourceLen);
-extern int packfrm(uchar *, size_t, uchar **, size_t *);
+extern int packfrm(const uchar *, size_t, uchar **, size_t *);
 extern int unpackfrm(uchar **, size_t *, const uchar *);
 
 extern ha_checksum my_checksum(ha_checksum crc, const uchar *mem,
@@ -935,24 +950,21 @@ void my_uuid(uchar *guid);
 void my_uuid2str(const uchar *guid, char *s);
 void my_uuid_end();
 
-struct my_rnd_struct {
-  unsigned long seed1,seed2,max_value;
-  double max_value_dbl;
-};
-
-void my_rnd_init(struct my_rnd_struct *rand_st, ulong seed1, ulong seed2);
-double my_rnd(struct my_rnd_struct *rand_st);
-
 /* character sets */
+extern void my_charset_loader_init_mysys(MY_CHARSET_LOADER *loader);
 extern uint get_charset_number(const char *cs_name, uint cs_flags);
 extern uint get_collation_number(const char *name);
 extern const char *get_charset_name(uint cs_number);
 
 extern CHARSET_INFO *get_charset(uint cs_number, myf flags);
 extern CHARSET_INFO *get_charset_by_name(const char *cs_name, myf flags);
+extern CHARSET_INFO *my_collation_get_by_name(MY_CHARSET_LOADER *loader,
+                                              const char *name, myf flags);
 extern CHARSET_INFO *get_charset_by_csname(const char *cs_name,
 					   uint cs_flags, myf my_flags);
-
+extern CHARSET_INFO *my_charset_get_by_name(MY_CHARSET_LOADER *loader,
+                                            const char *name,
+                                            uint cs_flags, myf my_flags);
 extern my_bool resolve_charset(const char *cs_name,
                                CHARSET_INFO *default_cs,
                                CHARSET_INFO **cs);
@@ -999,11 +1011,11 @@ char* my_cgets(char *string, size_t clen, size_t* plen);
 
 #ifdef HAVE_PSI_INTERFACE
 extern MYSQL_PLUGIN_IMPORT struct PSI_bootstrap *PSI_hook;
+extern void set_psi_server(PSI *psi);
 void my_init_mysys_psi_keys(void);
 #endif
 
 struct st_mysql_file;
 extern struct st_mysql_file *mysql_stdin;
-
 C_MODE_END
 #endif /* _my_sys_h */

@@ -48,7 +48,7 @@ int my_getwd(char * buf, size_t size, myf MyFlags)
 {
   char * pos;
   DBUG_ENTER("my_getwd");
-  DBUG_PRINT("my",("buf: 0x%lx  size: %u  MyFlags %d",
+  DBUG_PRINT("my",("buf: 0x%lx  size: %u  MyFlags %lu",
                    (long) buf, (uint) size, MyFlags));
 
   if (size < 1)
@@ -95,7 +95,7 @@ int my_setwd(const char *dir, myf MyFlags)
   size_t length;
   char *start, *pos;
   DBUG_ENTER("my_setwd");
-  DBUG_PRINT("my",("dir: '%s'  MyFlags %d", dir, MyFlags));
+  DBUG_PRINT("my",("dir: '%s'  MyFlags %lu", dir, MyFlags));
 
   start=(char *) dir;
   if (! dir[0] || (dir[0] == FN_LIBCHAR && dir[1] == 0))
@@ -157,12 +157,12 @@ int test_if_hard_path(register const char *dir_name)
 
 my_bool has_path(const char *name)
 {
-  return test(strchr(name, FN_LIBCHAR)) 
+  return MY_TEST(strchr(name, FN_LIBCHAR))
 #if FN_LIBCHAR != '/'
-    || test(strchr(name,'/'))
+    || MY_TEST(strchr(name, '/'))
 #endif
 #ifdef FN_DEVCHAR
-    || test(strchr(name, FN_DEVCHAR))
+    || MY_TEST(strchr(name, FN_DEVCHAR))
 #endif
     ;
 }

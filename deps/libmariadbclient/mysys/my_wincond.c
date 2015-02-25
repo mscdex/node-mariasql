@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -289,7 +289,7 @@ int pthread_cond_signal(pthread_cond_t *cond)
 
 
 int pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
-  struct timespec *abstime)
+  const struct timespec *abstime)
 {
   if (have_native_conditions)
   {
@@ -328,26 +328,4 @@ int pthread_attr_destroy(pthread_attr_t *connect_att)
   return 0;
 }
 
-/****************************************************************************
-** Fix localtime_r() to be a bit safer
-****************************************************************************/
-
-struct tm *localtime_r(const time_t *timep,struct tm *tmp)
-{
-  if (*timep == (time_t) -1)			/* This will crash win32 */
-  {
-    bzero(tmp,sizeof(*tmp));
-  }
-  else
-  {
-    struct tm *res=localtime(timep);
-    if (!res)                                   /* Wrong date */
-    {
-      bzero(tmp,sizeof(*tmp));                  /* Keep things safe */
-      return 0;
-    }
-    *tmp= *res;
-  }
-  return tmp;
-}
 #endif /* __WIN__ */

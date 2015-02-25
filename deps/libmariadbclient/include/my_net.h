@@ -1,4 +1,4 @@
-/* Copyright (c) 2000, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 /*
   This file is also used to make handling of sockets and ioctl()
@@ -61,13 +61,15 @@ C_MODE_START
   #define SD_BOTH 0x02
 */
 #define SHUT_RDWR 0x02
-
+#else
+#include <netdb.h>     /* getaddrinfo() & co */
 #endif
 
 /*
-  On OSes which don't have the in_addr_t, we guess that using uint32 is the best
-  possible choice. We guess this from the fact that on HP-UX64bit & FreeBSD64bit
-  & Solaris64bit, in_addr_t is equivalent to uint32. And on Linux32bit too.
+  On OSes which don't have the in_addr_t, we guess that using uint32
+  is the best possible choice. We guess this from the fact that on
+  HP-UX64bit & FreeBSD64bit & Solaris64bit, in_addr_t is equivalent to
+  uint32. And on Linux32bit too.
 */
 #ifndef HAVE_IN_ADDR_T
 #define in_addr_t uint32

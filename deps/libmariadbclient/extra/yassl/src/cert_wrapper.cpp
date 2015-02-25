@@ -1,6 +1,5 @@
 /*
-   Copyright (c) 2005-2007 MySQL AB, 2008, 2009 Sun Microsystems, Inc.
-   Use is subject to license terms.
+   Copyright (c) 2005, 2014, Oracle and/or its affiliates. All rights reserved.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -91,14 +90,15 @@ opaque* x509::use_buffer()
 
 //CertManager
 CertManager::CertManager()
-    : peerX509_(0), verifyPeer_(false), verifyNone_(false), failNoCert_(false),
-      sendVerify_(false), verifyCallback_(0)
+    : peerX509_(0), selfX509_(0), verifyPeer_(false), verifyNone_(false), failNoCert_(false),
+      sendVerify_(false), sendBlankCert_(false), verifyCallback_(0)
 {}
 
 
 CertManager::~CertManager()
 {
     ysDelete(peerX509_);
+    ysDelete(selfX509_);
 
     STL::for_each(signers_.begin(), signers_.end(), del_ptr_zero()) ;
 
@@ -143,6 +143,11 @@ void CertManager::setVerifyNone()
     verifyNone_ = true;
 }
 
+bool CertManager::sendBlankCert() const
+{
+  return sendBlankCert_;
+}
+
 
 void CertManager::setFailNoCert()
 {
@@ -153,6 +158,11 @@ void CertManager::setFailNoCert()
 void CertManager::setSendVerify()
 {
     sendVerify_ = true;
+}
+
+void CertManager::setSendBlankCert()
+{
+  sendBlankCert_ = true;
 }
 
 
@@ -207,6 +217,12 @@ const opaque* CertManager::get_peerKey() const
 X509* CertManager::get_peerX509() const
 {
     return peerX509_;
+}
+
+
+X509* CertManager::get_selfX509() const
+{
+    return selfX509_;
 }
 
 
@@ -280,11 +296,15 @@ int CertManager::Validate()
 
         size_t iSz = strlen(cert.GetIssuer()) + 1;
         size_t sSz = strlen(cert.GetCommonName()) + 1;
-        int bSz = (int)strlen(cert.GetBeforeDate()) + 1;
-        int aSz = (int)strlen(cert.GetAfterDate()) + 1;
+        ASN1_STRING beforeDate, afterDate;
+        beforeDate.data= (unsigned char *) cert.GetBeforeDate();
+        beforeDate.type= cert.GetBeforeDateType();
+        beforeDate.length= strlen((char *) beforeDate.data) + 1;
+        afterDate.data= (unsigned char *) cert.GetAfterDate();
+        afterDate.type= cert.GetAfterDateType();
+        afterDate.length= strlen((char *) afterDate.data) + 1;
         peerX509_ = NEW_YS X509(cert.GetIssuer(), iSz, cert.GetCommonName(),
-                                sSz, cert.GetBeforeDate(), bSz,
-                                cert.GetAfterDate(), aSz);
+                                sSz, &beforeDate, &afterDate);
 
         if (err == TaoCrypt::SIG_OTHER_E && verifyCallback_) {
             X509_STORE_CTX store;
@@ -319,6 +339,18 @@ int CertManager::SetPrivateKey(const x509& key)
             keyType_ = rsa_sa_algo;
         else
             keyType_ = dsa_sa_algo;
+
+        size_t iSz = strlen(cd.GetIssuer()) + 1;
+        size_t sSz = strlen(cd.GetCommonName()) + 1;
+        ASN1_STRING beforeDate, afterDate;
+        beforeDate.data= (unsigned char *) cd.GetBeforeDate();
+        beforeDate.type= cd.GetBeforeDateType();
+        beforeDate.length= strlen((char *) beforeDate.data) + 1;
+        afterDate.data= (unsigned char *) cd.GetAfterDate();
+        afterDate.type= cd.GetAfterDateType();
+        afterDate.length= strlen((char *) afterDate.data) + 1;
+        selfX509_ = NEW_YS X509(cd.GetIssuer(), iSz, cd.GetCommonName(),
+                                sSz, &beforeDate, &afterDate);
     }
     return 0;
 }
@@ -335,8 +367,7 @@ void CertManager::setPeerX509(X509* x)
     ASN1_STRING* after  = x->GetAfter();
 
     peerX509_ = NEW_YS X509(issuer->GetName(), issuer->GetLength(),
-        subject->GetName(), subject->GetLength(), (const char*) before->data,
-        before->length, (const char*) after->data, after->length);
+        subject->GetName(), subject->GetLength(), before, after);
 }
 
 

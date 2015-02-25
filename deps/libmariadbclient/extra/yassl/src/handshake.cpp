@@ -1,6 +1,5 @@
 /*
-   Copyright (c) 2005-2008 MySQL AB, 2009 Sun Microsystems, Inc.
-   Use is subject to license terms.
+   Copyright (c) 2005, 2014, Oracle and/or its affiliates.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -221,11 +220,44 @@ void buildSHA(SSL& ssl, Finished& fin, const opaque* sender)
 }
 
 
+// sanity checks on encrypted message size
+static int sanity_check_message(SSL& ssl, uint msgSz)
+{
+    uint minSz = 0;
+
+    if (ssl.getSecurity().get_parms().cipher_type_ == block) {
+        uint blockSz = ssl.getCrypto().get_cipher().get_blockSize();
+        if (msgSz % blockSz)
+            return -1;
+
+        minSz = ssl.getSecurity().get_parms().hash_size_ + 1;  // pad byte too
+        if (blockSz > minSz)
+            minSz = blockSz;
+
+        if (ssl.isTLSv1_1())
+            minSz += blockSz;   // explicit IV
+    }
+    else {      // stream
+        minSz = ssl.getSecurity().get_parms().hash_size_;
+    }
+
+    if (msgSz < minSz)
+        return -1;
+
+    return 0;
+}
+
+
 // decrypt input message in place, store size in case needed later
 void decrypt_message(SSL& ssl, input_buffer& input, uint sz)
 {
     input_buffer plain(sz);
     opaque*      cipher = input.get_buffer() + input.get_current();
+
+    if (sanity_check_message(ssl, sz) != 0) {
+        ssl.SetError(sanityCipher_error);
+        return;
+    }
 
     ssl.useCrypto().use_cipher().decrypt(plain.get_buffer(), cipher, sz);
     memcpy(cipher, plain.get_buffer(), sz);
@@ -490,7 +522,7 @@ void buildSHA_CertVerify(SSL& ssl, byte* digest)
 // some clients still send sslv2 client hello
 void ProcessOldClientHello(input_buffer& input, SSL& ssl)
 {
-    if (input.get_remaining() < 2) {
+    if (input.get_error() || input.get_remaining() < 2) {
         ssl.SetError(bad_input);
         return;
     }
@@ -517,20 +549,24 @@ void ProcessOldClientHello(input_buffer& input, SSL& ssl)
 
     byte len[2];
 
-    input.read(len, sizeof(len));
+    len[0] = input[AUTO];
+    len[1] = input[AUTO];
     ato16(len, ch.suite_len_);
 
-    input.read(len, sizeof(len));
+    len[0] = input[AUTO];
+    len[1] = input[AUTO];
     uint16 sessionLen;
     ato16(len, sessionLen);
     ch.id_len_ = sessionLen;
 
-    input.read(len, sizeof(len));
+    len[0] = input[AUTO];
+    len[1] = input[AUTO];
     uint16 randomLen;
     ato16(len, randomLen);
 
-    if (ch.suite_len_ > MAX_SUITE_SZ || sessionLen > ID_LEN ||
-                                        randomLen > RAN_LEN) {
+    if (input.get_error() || ch.suite_len_ > MAX_SUITE_SZ ||
+                             ch.suite_len_ > input.get_remaining() ||
+                             sessionLen > ID_LEN || randomLen > RAN_LEN) {
         ssl.SetError(bad_input);
         return;
     }
@@ -548,13 +584,12 @@ void ProcessOldClientHello(input_buffer& input, SSL& ssl)
     ch.suite_len_ = j;
 
     if (ch.id_len_)
-        input.read(ch.session_id_, ch.id_len_);
+        input.read(ch.session_id_, ch.id_len_);   // id_len_ from sessionLen
 
     if (randomLen < RAN_LEN)
         memset(ch.random_, 0, RAN_LEN - randomLen);
     input.read(&ch.random_[RAN_LEN - randomLen], randomLen);
  
-
     ch.Process(input, ssl);
 }
 
@@ -712,7 +747,8 @@ int DoProcessReply(SSL& ssl)
         return 0;
     }
     uint ready = ssl.getSocket().get_ready();
-    if (!ready) return 1; 
+    if (!ready)
+      ready= 64;
 
     // add buffered data if its there
     input_buffer* buffered = ssl.useBuffers().TakeRawInput();
@@ -755,6 +791,9 @@ int DoProcessReply(SSL& ssl)
             ssl.verifyState(hdr);
         }
 
+        if (ssl.GetError())
+            return 0;
+
         // make sure we have enough input in buffer to process this record
         if (needHdr || hdr.length_ > buffer.get_remaining()) {
             // put header in front for next time processing
@@ -767,6 +806,9 @@ int DoProcessReply(SSL& ssl)
 
         while (buffer.get_current() < hdr.length_ + RECORD_HEADER + offset) {
             // each message in record, can be more than 1 if not encrypted
+            if (ssl.GetError())
+                return 0;
+
             if (ssl.getSecurity().get_parms().pending_ == false) { // cipher on
                 // sanity check for malicious/corrupted/illegal input
                 if (buffer.get_remaining() < hdr.length_) {
@@ -774,6 +816,8 @@ int DoProcessReply(SSL& ssl)
                     return 0;
                 }
                 decrypt_message(ssl, buffer, hdr.length_);
+                if (ssl.GetError())
+                    return 0;
             }
                 
             mySTL::auto_ptr<Message> msg(mf.CreateObject(hdr.type_));
@@ -1124,6 +1168,8 @@ void sendCertificateRequest(SSL& ssl, BufferOutput buffer)
 void sendCertificateVerify(SSL& ssl, BufferOutput buffer)
 {
     if (ssl.GetError()) return;
+
+    if(ssl.getCrypto().get_certManager().sendBlankCert()) return;
 
     CertificateVerify  verify;
     verify.Build(ssl);

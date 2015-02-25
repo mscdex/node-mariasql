@@ -20,6 +20,7 @@
         '../extra/yassl/taocrypt/taocrypt.gyp:taocrypt',
         '../extra/yassl/yassl.gyp:yassl',
         '../mysys/mysys.gyp:mysys',
+        '../mysys_ssl/mysys_ssl.gyp:mysys_ssl',
         '../strings/strings.gyp:strings',
         '../vio/vio.gyp:vio',
         '../zlib/zlib.gyp:zlib',

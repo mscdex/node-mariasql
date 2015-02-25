@@ -1,6 +1,5 @@
-/* Copyright (c) 2002-2007 MySQL AB, 2009 Sun Microsystems, Inc.
-   Copyright (c) 2009-2011, Monty Program Ab
-   Use is subject to license terms.
+/* Copyright (c) 2002, 2013, Oracle and/or its affiliates.
+   Copyright (c) 2009, 2014, SkySQL Ab.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -73,27 +72,28 @@ size_t my_strnxfrmlen_simple(CHARSET_INFO *cs, size_t len)
 
 
 size_t my_strnxfrm_simple(CHARSET_INFO * cs, 
-                          uchar *dest, size_t len,
-                          const uchar *src, size_t srclen)
+                          uchar *dst, size_t dstlen, uint nweights,
+                          const uchar *src, size_t srclen, uint flags)
 {
   const uchar *map= cs->sort_order;
-  size_t dstlen= len;
-  set_if_smaller(len, srclen);
-  if (dest != src)
+  uchar *d0= dst;
+  uint frmlen;
+  if ((frmlen= MY_MIN(dstlen, nweights)) > srclen)
+    frmlen= srclen;
+  if (dst != src)
   {
     const uchar *end;
-    for ( end=src+len; src < end ;  )
-      *dest++= map[*src++];
+    for (end= src + frmlen; src < end;)
+      *dst++= map[*src++];
   }
   else
   {
     const uchar *end;
-    for ( end=dest+len; dest < end ; dest++)
-      *dest= (char) map[(uchar) *dest];
+    for (end= dst + frmlen; dst < end; dst++)
+      *dst= map[(uchar) *dst];
   }
-  if (dstlen > len)
-    bfill(dest, dstlen - len, ' ');
-  return dstlen;
+  return my_strxfrm_pad_desc_and_reverse(cs, d0, dst, d0 + dstlen,
+                                         nweights - frmlen, flags, 0);
 }
 
 
@@ -160,7 +160,7 @@ int my_strnncollsp_simple(CHARSET_INFO * cs, const uchar *a, size_t a_length,
   diff_if_only_endspace_difference= 0;
 #endif
 
-  end= a + (length= min(a_length, b_length));
+  end= a + (length= MY_MIN(a_length, b_length));
   while (a < end)
   {
     if (map[*a++] != map[*b++])
@@ -306,24 +306,48 @@ void my_hash_sort_simple(CHARSET_INFO *cs,
 {
   register const uchar *sort_order=cs->sort_order;
   const uchar *end;
-  ulong n1, n2;
+  register ulong m1= *nr1, m2= *nr2;
+  uint16 space_weight= sort_order[' '];
 
   /*
-    Remove end space. We have to do this to be able to compare
-    'A ' and 'A' as identical
-  */
-  end= skip_trailing_space(key, len);
+    Remove all trailing characters that are equal to space.
+    We have to do this to be able to compare 'A ' and 'A' as identical.
 
-  n1= *nr1;
-  n2= *nr2;
+    If the key is long enough, cut the trailing spaces (0x20) using an
+    optimized function implemented in skip_trailing_spaces().
+
+    "len > 16" is just some heuristic here.
+    Calling skip_triling_space() for short values is not desirable,
+    because its initialization block may be more expensive than the
+    performance gained.
+  */
+
+  end= len > 16 ? skip_trailing_space(key, len) : key + len;
+
+  /*
+    We removed all trailing characters that are binary equal to space 0x20.
+    Now remove all trailing characters that have weights equal to space.
+    Some 8bit simple collations may have such characters:
+    - cp1250_general_ci    0xA0 NO-BREAK SPACE == 0x20 SPACE
+    - cp1251_ukrainian_ci  0x60 GRAVE ACCENT   == 0x20 SPACE
+    - koi8u_general_ci     0x60 GRAVE ACCENT   == 0x20 SPACE
+  */
+
+  for ( ; key < end ; )
+  {
+    if (sort_order[*--end] != space_weight)
+    {
+      end++;
+      break;
+    }
+  }
+
   for (; key < (uchar*) end ; key++)
   {
-    n1^=(ulong) ((((uint) n1 & 63)+n2) *
-	     ((uint) sort_order[(uint) *key])) + (n1 << 8);
-    n2+=3;
+    MY_HASH_ADD(m1, m2, (uint) sort_order[(uint) *key]);
   }
-  *nr1= n1;
-  *nr2= n2;
+  *nr1= m1;
+  *nr2= m2;
 }
 
 
@@ -770,7 +794,7 @@ size_t my_long10_to_str_8bit(CHARSET_INFO *cs __attribute__((unused)),
     val= new_val;
   }
   
-  len= min(len, (size_t) (e-p));
+  len= MY_MIN(len, (size_t) (e-p));
   memcpy(dst, p, len);
   return len+sign;
 }
@@ -824,7 +848,7 @@ size_t my_longlong10_to_str_8bit(CHARSET_INFO *cs __attribute__((unused)),
     long_val= quo;
   }
   
-  len= min(len, (size_t) (e-p));
+  len= MY_MIN(len, (size_t) (e-p));
 cnv:
   memcpy(dst, p, len);
   return len+sign;
@@ -847,13 +871,16 @@ cnv:
 #define INC_PTR(cs,A,B) (A)++
 
 
-int my_wildcmp_8bit(CHARSET_INFO *cs,
-		    const char *str,const char *str_end,
-		    const char *wildstr,const char *wildend,
-		    int escape, int w_one, int w_many)
+static
+int my_wildcmp_8bit_impl(CHARSET_INFO *cs,
+                         const char *str,const char *str_end,
+                         const char *wildstr,const char *wildend,
+                         int escape, int w_one, int w_many, int recurse_level)
 {
   int result= -1;			/* Not found, using wildcards */
 
+  if (my_string_stack_guard && my_string_stack_guard(recurse_level))
+    return 1;
   while (wildstr != wildend)
   {
     while (*wildstr != w_many && *wildstr != w_one)
@@ -909,20 +936,42 @@ int my_wildcmp_8bit(CHARSET_INFO *cs,
       cmp=likeconv(cs,cmp);
       do
       {
+        /*
+          Find the next character in the subject string equal to 'cmp', then
+          check recursively my_wildcmp_8bit_impl() for the pattern remainder.
+        */
 	while (str != str_end && (uchar) likeconv(cs,*str) != cmp)
 	  str++;
-	if (str++ == str_end) return(-1);
+	if (str++ == str_end)
+	  return(-1); /* 'cmp' was not found in the subject string */
 	{
-	  int tmp=my_wildcmp_8bit(cs,str,str_end,wildstr,wildend,escape,w_one,
-				  w_many);
+	  int tmp=my_wildcmp_8bit_impl(cs,str,str_end,
+                                       wildstr,wildend,escape,w_one,
+                                       w_many, recurse_level+1);
 	  if (tmp <= 0)
 	    return(tmp);
 	}
-      } while (str != str_end && wildstr[0] != w_many);
+        /*
+          The recursion call did not match. But it returned 1, which means
+          the pattern remainder has some non-special characters.
+          Continue, there is a chance that we'll find another 'cmp'
+          at a different position in the subject string.
+        */
+      } while (str != str_end);
       return(-1);
     }
   }
   return(str != str_end ? 1 : 0);
+}
+
+int my_wildcmp_8bit(CHARSET_INFO *cs,
+                    const char *str,const char *str_end,
+                    const char *wildstr,const char *wildend,
+                    int escape, int w_one, int w_many)
+{
+  return my_wildcmp_8bit_impl(cs, str, str_end,
+                              wildstr, wildend,
+                              escape, w_one, w_many, 1);
 }
 
 
@@ -1055,7 +1104,7 @@ size_t my_well_formed_len_8bit(CHARSET_INFO *cs __attribute__((unused)),
 {
   size_t nbytes= (size_t) (end-start);
   *error= 0;
-  return min(nbytes, nchars);
+  return MY_MIN(nbytes, nchars);
 }
 
 
@@ -1149,12 +1198,12 @@ static int pcmp(const void * f, const void * s)
   return res;
 }
 
-static my_bool create_fromuni(struct charset_info_st *cs,
-                              void *(*alloc)(size_t))
+static my_bool
+create_fromuni(struct charset_info_st *cs,
+               MY_CHARSET_LOADER *loader)
 {
   uni_idx	idx[PLANE_NUM];
   int		i,n;
-  struct my_uni_idx_st *tab_from_uni;
   
   /*
     Check that Unicode map is loaded.
@@ -1203,7 +1252,8 @@ static my_bool create_fromuni(struct charset_info_st *cs,
     
     numchars=idx[i].uidx.to-idx[i].uidx.from+1;
     if (!(idx[i].uidx.tab= tab= (uchar*)
-          alloc(numchars * sizeof(*idx[i].uidx.tab))))
+                                (loader->once_alloc) (numchars *
+                                                      sizeof(*idx[i].uidx.tab))))
       return TRUE;
     
     bzero(tab,numchars*sizeof(*tab));
@@ -1221,25 +1271,25 @@ static my_bool create_fromuni(struct charset_info_st *cs,
   
   /* Allocate and fill reverse table for each plane */
   n=i;
-  if (!(cs->tab_from_uni= tab_from_uni= (struct my_uni_idx_st*)
-        alloc(sizeof(MY_UNI_IDX)*(n+1))))
+  if (!(cs->tab_from_uni= (MY_UNI_IDX *)
+                          (loader->once_alloc)(sizeof(MY_UNI_IDX) * (n + 1))))
     return TRUE;
 
   for (i=0; i< n; i++)
-    tab_from_uni[i]= idx[i].uidx;
+    ((struct my_uni_idx_st*)cs->tab_from_uni)[i]= idx[i].uidx;
   
   /* Set end-of-list marker */
-  bzero(&tab_from_uni[i],sizeof(MY_UNI_IDX));
+  bzero((char*) &cs->tab_from_uni[i],sizeof(MY_UNI_IDX));
   return FALSE;
 }
 
-static my_bool my_cset_init_8bit(struct charset_info_st *cs,
-                                 void *(*alloc)(size_t))
+static my_bool
+my_cset_init_8bit(struct charset_info_st *cs, MY_CHARSET_LOADER *loader)
 {
   cs->caseup_multiply= 1;
   cs->casedn_multiply= 1;
   cs->pad_char= ' ';
-  return create_fromuni(cs, alloc);
+  return create_fromuni(cs, loader);
 }
 
 static void set_max_sort_char(struct charset_info_st *cs)
@@ -1262,7 +1312,7 @@ static void set_max_sort_char(struct charset_info_st *cs)
 }
 
 static my_bool my_coll_init_simple(struct charset_info_st *cs,
-                                   void *(*alloc)(size_t) __attribute__((unused)))
+                                   MY_CHARSET_LOADER *loader __attribute__((unused)))
 {
   set_max_sort_char(cs);
   return FALSE;
@@ -1666,6 +1716,145 @@ my_bool my_propagate_complex(CHARSET_INFO *cs __attribute__((unused)),
                              size_t length __attribute__((unused)))
 {
   return 0;
+}
+
+
+/*
+  Normalize strxfrm flags
+
+  SYNOPSIS:
+    my_strxfrm_flag_normalize()
+    flags    - non-normalized flags
+    nlevels  - number of levels
+    
+  NOTES:
+    If levels are omitted, then 1-maximum is assumed.
+    If any level number is greater than the maximum,
+    it is treated as the maximum.
+
+  RETURN
+    normalized flags
+*/
+
+uint my_strxfrm_flag_normalize(uint flags, uint maximum)
+{
+  DBUG_ASSERT(maximum >= 1 && maximum <= MY_STRXFRM_NLEVELS);
+  
+  /* If levels are omitted, then 1-maximum is assumed*/
+  if (!(flags & MY_STRXFRM_LEVEL_ALL))
+  {
+    static uint def_level_flags[]= {0, 0x01, 0x03, 0x07, 0x0F, 0x1F, 0x3F };
+    uint flag_pad= flags &
+                   (MY_STRXFRM_PAD_WITH_SPACE | MY_STRXFRM_PAD_TO_MAXLEN);
+    flags= def_level_flags[maximum] | flag_pad;
+  }
+  else
+  {
+    uint i;
+    uint flag_lev= flags & MY_STRXFRM_LEVEL_ALL;
+    uint flag_dsc= (flags >> MY_STRXFRM_DESC_SHIFT) & MY_STRXFRM_LEVEL_ALL;
+    uint flag_rev= (flags >> MY_STRXFRM_REVERSE_SHIFT) & MY_STRXFRM_LEVEL_ALL;
+    uint flag_pad= flags &
+                   (MY_STRXFRM_PAD_WITH_SPACE | MY_STRXFRM_PAD_TO_MAXLEN);
+
+    /*
+      If any level number is greater than the maximum,
+      it is treated as the maximum.
+    */
+    for (maximum--, flags= 0, i= 0; i < MY_STRXFRM_NLEVELS; i++)
+    {
+      uint src_bit= 1 << i;
+      if (flag_lev & src_bit)
+      {
+        uint dst_bit= 1 << MY_MIN(i, maximum);
+        flags|= dst_bit;
+        flags|= (flag_dsc & dst_bit) << MY_STRXFRM_DESC_SHIFT;
+        flags|= (flag_rev & dst_bit) << MY_STRXFRM_REVERSE_SHIFT;
+      }
+    }
+    flags|= flag_pad;
+  }
+  
+  return flags;
+}
+
+
+/*
+  Apply DESC and REVERSE collation rules.
+
+  SYNOPSIS:
+    my_strxfrm_desc_and_reverse()
+    str      - pointer to string
+    strend   - end of string
+    flags    - flags
+    level    - which level, starting from 0.
+    
+  NOTES:
+    Apply DESC or REVERSE or both flags.
+    
+    If DESC flag is given, then the weights
+    come out NOTed or negated for that level.
+    
+    If REVERSE flags is given, then the weights come out in
+    reverse order for that level, that is, starting with
+    the last character and ending with the first character.
+    
+    If nether DESC nor REVERSE flags are give,
+    the string is not changed.
+    
+*/
+void
+my_strxfrm_desc_and_reverse(uchar *str, uchar *strend,
+                            uint flags, uint level)
+{
+  if (flags & (MY_STRXFRM_DESC_LEVEL1 << level))
+  {
+    if (flags & (MY_STRXFRM_REVERSE_LEVEL1 << level))
+    {
+      for (strend--; str <= strend;)
+      {
+        uchar tmp= *str;
+        *str++= ~*strend;
+        *strend--= ~tmp;
+      }
+    }
+    else
+    {
+      for (; str < strend; str++)
+        *str= ~*str;
+    }
+  }
+  else if (flags & (MY_STRXFRM_REVERSE_LEVEL1 << level))
+  {
+    for (strend--; str < strend;)
+    {
+      uchar tmp= *str;
+      *str++= *strend;
+      *strend--= tmp;
+    }
+  }
+}
+
+
+size_t
+my_strxfrm_pad_desc_and_reverse(CHARSET_INFO *cs,
+                                uchar *str, uchar *frmend, uchar *strend,
+                                uint nweights, uint flags, uint level)
+{
+  if (nweights && frmend < strend && (flags & MY_STRXFRM_PAD_WITH_SPACE))
+  {
+    uint fill_length= MY_MIN((uint) (strend - frmend), nweights * cs->mbminlen);
+    cs->cset->fill(cs, (char*) frmend, fill_length, cs->pad_char);
+    frmend+= fill_length;
+  }
+  my_strxfrm_desc_and_reverse(str, frmend, flags, level);
+  if ((flags & MY_STRXFRM_PAD_TO_MAXLEN) && frmend < strend)
+  {
+    uint fill_length= strend - frmend;
+    cs->cset->fill(cs, (char*) frmend, fill_length, cs->pad_char);
+    frmend= strend;
+  }
+  return frmend - str;
 }
 
 

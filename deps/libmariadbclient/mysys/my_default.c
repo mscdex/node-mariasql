@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
+   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA */
 
 /****************************************************************************
  Add all options from files named "group".cnf from the default_directories
@@ -34,8 +34,9 @@
 ****************************************************************************/
 
 #include "mysys_priv.h"
-#include "m_string.h"
-#include "m_ctype.h"
+#include <my_default.h>
+#include <m_string.h>
+#include <m_ctype.h>
 #include <my_dir.h>
 #ifdef __WIN__
 #include <winbase.h>
@@ -137,9 +138,8 @@ static int search_default_file_with_ext(Process_option_func func,
   - Windows:     GetWindowsDirectory()
   - Windows:     C:/
   - Windows:     Directory above where the executable is located
-  - Unix:        /etc/
-  - Unix:        /etc/mysql/
-  - Unix:        --sysconfdir=<path> (compile-time option)
+  - Unix:        /etc/ or the value of DEFAULT_SYSCONFDIR, if defined
+  - Unix:        /etc/mysql/ unless DEFAULT_SYSCONFDIR is defined
   - ALL:         getenv("MYSQL_HOME")
   - ALL:         --defaults-extra-file=<path> (run-time option)
   - Unix:        ~/
@@ -520,7 +520,7 @@ int my_load_defaults(const char *conf_file, const char **groups,
   uint args_sep= my_getopt_use_args_separator ? 1 : 0;
   DBUG_ENTER("load_defaults");
 
-  init_alloc_root(&alloc,512,0);
+  init_alloc_root(&alloc, 512, 0, MYF(0));
   if ((dirs= init_default_directories(&alloc)) == NULL)
     goto err;
   /*
@@ -566,7 +566,7 @@ int my_load_defaults(const char *conf_file, const char **groups,
   for (; *groups ; groups++)
     group.count++;
 
-  if (my_init_dynamic_array(&args, sizeof(char*),*argc, 32))
+  if (my_init_dynamic_array(&args, sizeof(char*),*argc, 32, MYF(0)))
     goto err;
 
   ctx.alloc= &alloc;
@@ -814,7 +814,7 @@ static int search_default_file_with_ext(Process_option_func opt_handler,
       continue;
 
     /* Configuration File Directives */
-    if ((*ptr == '!'))
+    if (*ptr == '!')
     {
       if (recursion_level >= max_recursion_level)
       {
@@ -846,10 +846,10 @@ static int search_default_file_with_ext(Process_option_func opt_handler,
         if (!(search_dir= my_dir(ptr, MYF(MY_WME))))
           goto err;
 
-        for (i= 0; i < (uint) search_dir->number_off_files; i++)
+        for (i= 0; i < (uint) search_dir->number_of_files; i++)
         {
           search_file= search_dir->dir_entry + i;
-          ext= fn_ext(search_file->name);
+          ext= fn_ext2(search_file->name);
 
           /* check extension */
           for (tmp_ext= (char**) f_extensions; *tmp_ext; tmp_ext++)
@@ -899,7 +899,7 @@ static int search_default_file_with_ext(Process_option_func opt_handler,
       for ( ; my_isspace(&my_charset_latin1,end[-1]) ; end--) ;
       end[0]=0;
 
-      strmake(curr_gr, ptr, min((size_t) (end-ptr)+1, sizeof(curr_gr)-1));
+      strmake(curr_gr, ptr, MY_MIN((size_t) (end-ptr)+1, sizeof(curr_gr)-1));
 
       /* signal that a new group is found */
       opt_handler(handler_ctx, curr_gr, NULL);
@@ -1043,7 +1043,7 @@ void my_print_default_files(const char *conf_file)
   {
     const char **dirs;
     MEM_ROOT alloc;
-    init_alloc_root(&alloc,512,0);
+    init_alloc_root(&alloc, 512, 0, MYF(0));
 
     if ((dirs= init_default_directories(&alloc)) == NULL)
     {
@@ -1223,12 +1223,12 @@ static const char **init_default_directories(MEM_ROOT *alloc)
 
 #else
 
-  errors += add_directory(alloc, "/etc/", dirs);
-  errors += add_directory(alloc, "/etc/mysql/", dirs);
-
 #if defined(DEFAULT_SYSCONFDIR)
   if (DEFAULT_SYSCONFDIR[0])
     errors += add_directory(alloc, DEFAULT_SYSCONFDIR, dirs);
+#else
+  errors += add_directory(alloc, "/etc/", dirs);
+  errors += add_directory(alloc, "/etc/mysql/", dirs);
 #endif /* DEFAULT_SYSCONFDIR */
 
 #endif
