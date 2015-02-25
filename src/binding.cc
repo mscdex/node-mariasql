@@ -260,6 +260,7 @@ class Client : public ObjectWrap {
     bool req_metadata;
     bool need_metadata;
     int state;
+    int last_status;
 #define X(name)  \
     NanCallback *on##name;
     EVENT_NAMES
@@ -355,16 +356,15 @@ class Client : public ObjectWrap {
       clear_state();
 
       if (state != STATE_CLOSED) {
+        state = STATE_CLOSED;
         Unref();
         mysql_close(&mysql);
         if (is_destructing) {
           if (poll_handle)
             uv_poll_stop(poll_handle);
           FREE(poll_handle);
-        } else {
-          state = STATE_CLOSED;
+        } else
           uv_close((uv_handle_t*)poll_handle, cb_close);
-        }
         return true;
       }
       return false;
@@ -411,7 +411,7 @@ class Client : public ObjectWrap {
               state_strings[state], is_paused);
       if (state == STATE_ROW && is_paused) {
         is_paused = false;
-        do_work();
+        do_work(last_status);
         return true;
       }
       return false;
@@ -540,6 +540,11 @@ class Client : public ObjectWrap {
           break;
           case STATE_RESULT:
             // we have a result and now we check for rows
+
+            // make sure a pause for a previous result does not interfere with
+            // future results/queries
+            is_paused = false;
+
             cur_result = mysql_use_result(&mysql);
             if (!cur_result) {
               if (mysql_errno(&mysql))
@@ -707,10 +712,25 @@ class Client : public ObjectWrap {
         DBG_LOG("do_work() loop end, state=%s,is_cont=%d,done=%d\n",
                 state_strings[state], is_cont, done);
       }
+
+      // if we're currently paused due to backpressure, it is important that we
+      // do *not* execute `uv_poll_start()` again since doing so *can* lead to
+      // the poll handle becoming inactive, causing the db connection to no
+      // longer keep the event loop alive (despite the handle still being
+      // ref'ed)
+      if (is_paused)
+        return;
+
       if (status & MYSQL_WAIT_READ)
         new_events |= UV_READABLE;
       if (status & MYSQL_WAIT_WRITE)
         new_events |= UV_WRITABLE;
+
+      // always store the most recent libmariadbclient status flags so that the
+      // mysql_* functions will continue properly if we resume from a paused
+      // state
+      last_status = status;
+
       uv_poll_start(poll_handle, new_events, cb_poll);
       DBG_LOG("do_work() end, new_events=%s\n",
               ((event & (UV_READABLE|UV_WRITABLE)) == (UV_READABLE|UV_WRITABLE)
