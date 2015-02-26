@@ -243,10 +243,10 @@ const my_bool MY_BOOL_FALSE = 0;
 class Client : public ObjectWrap {
   public:
     Persistent<Object> context;
-    uv_poll_t *poll_handle;
+    uv_poll_t* poll_handle;
     uv_os_sock_t mysql_sock;
     MYSQL mysql;
-    MYSQL *mysql_ret;
+    MYSQL* mysql_ret;
     sql_config config;
     bool initialized;
     bool is_cont;
@@ -254,7 +254,7 @@ class Client : public ObjectWrap {
     bool is_destructing;
     bool is_paused;
     char* cur_query;
-    MYSQL_RES *cur_result;
+    MYSQL_RES* cur_result;
     //MYSQL_STMT* cur_stmt;
     MYSQL_ROW cur_row;
     bool req_columns;
@@ -504,9 +504,7 @@ class Client : public ObjectWrap {
               }
 
               poll_handle = (uv_poll_t*)malloc(sizeof(uv_poll_t));
-              uv_poll_init_socket(uv_default_loop(),
-                                  poll_handle,
-                                  mysql_sock);
+              uv_poll_init_socket(uv_default_loop(), poll_handle, mysql_sock);
               uv_poll_start(poll_handle, UV_READABLE, cb_poll);
               poll_handle->data = this;
 
@@ -1291,7 +1289,6 @@ class Client : public ObjectWrap {
       NODE_SET_PROTOTYPE_METHOD(tpl, "setConfig", SetConfig);
       NODE_SET_PROTOTYPE_METHOD(tpl, "pause", Pause);
       NODE_SET_PROTOTYPE_METHOD(tpl, "resume", Resume);
-      //NODE_SET_PROTOTYPE_METHOD(tpl, "abortQuery", AbortQuery);
       NODE_SET_PROTOTYPE_METHOD(tpl, "escape", Escape);
       NODE_SET_PROTOTYPE_METHOD(tpl, "close", Close);
       NODE_SET_PROTOTYPE_METHOD(tpl, "isMariaDB", IsMariaDB);
