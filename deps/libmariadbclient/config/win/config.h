@@ -591,25 +591,6 @@
 #define HAVE_QUERY_CACHE 1
 #define BIG_TABLES 1
 
-/*
-  Important storage engines (those that really need define 
-  WITH_<ENGINE>_STORAGE_ENGINE for the whole server)
-*/
-#define WITH_MYISAM_STORAGE_ENGINE 1
-#define WITH_MYISAMMRG_STORAGE_ENGINE 1
-#define WITH_HEAP_STORAGE_ENGINE 1
-/* #undef WITH_INNOBASE_STORAGE_ENGINE */
-/* #undef WITH_XTRADB_STORAGE_ENGINE */
-#define WITH_CSV_STORAGE_ENGINE 1
-/* #undef WITH_PARTITION_STORAGE_ENGINE */
-/* #undef WITH_PERFSCHEMA_STORAGE_ENGINE */
-/* #undef WITH_NDBCLUSTER_STORAGE_ENGINE */
-#if (WITH_NDBCLUSTER_STORAGE_ENGINE) && !defined(EMBEDDED_LIBRARY)
-# define HAVE_NDB_BINLOG 1
-#endif
-/* #undef WITH_ARIA_STORAGE_ENGINE */
-#define USE_ARIA_FOR_TMP_TABLES 1
-
 #define DEFAULT_MYSQL_HOME "C:/MariaDB5.5"
 #define SHAREDIR "share"
 #define DEFAULT_BASEDIR "C:/MariaDB5.5"
