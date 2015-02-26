@@ -18,7 +18,7 @@ using namespace v8;
 # define DBG_LOG(fmt, ...)                                            \
     do { fprintf(stderr, "DEBUG: " fmt , ##__VA_ARGS__); } while (0)
 #else
-# define DBG_LOG
+# define DBG_LOG(fmt, ...) (void(0))
 #endif
 #define FREE(p) if (p) { free(p); p = NULL; }
 #define IS_BINARY(f) ((f.flags & BINARY_FLAG) &&                      \
