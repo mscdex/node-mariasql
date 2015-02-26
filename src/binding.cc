@@ -347,8 +347,6 @@ class Client : public ObjectWrap {
       FREE(config.ssl_capath);
       FREE(config.ssl_cipher);
       FREE(config.charset);
-
-      FREE(cur_query);
     }
 
     bool close() {
@@ -387,8 +385,7 @@ class Client : public ObjectWrap {
       DBG_LOG("query() state=%s,columns=%d,metadata=%d,query=%s\n",
               state_strings[state], columns, metadata, qry);
       if (state == STATE_IDLE) {
-        FREE(cur_query);
-        cur_query = strdup(qry);
+        cur_query = (char*)qry;
         req_columns = columns;
         req_metadata = metadata;
         state = STATE_QUERY;
@@ -539,7 +536,7 @@ class Client : public ObjectWrap {
                                               &mysql,
                                               cur_query,
                                               strlen(cur_query));
-              FREE(cur_query);
+              cur_query = NULL;
               if (status) {
                 done = true;
                 is_cont = true;
