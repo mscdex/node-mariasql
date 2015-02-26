@@ -104,6 +104,7 @@ using namespace v8;
   X(rejectUnauthorized)
 
 static Persistent<FunctionTemplate> constructor;
+//static Persistent<FunctionTemplate> stmt_constructor;
 static Persistent<String> code_symbol;
 static Persistent<String> context_symbol;
 static Persistent<String> conncfg_symbol;
@@ -254,6 +255,7 @@ class Client : public ObjectWrap {
     bool is_paused;
     char* cur_query;
     MYSQL_RES *cur_result;
+    //MYSQL_STMT* cur_stmt;
     MYSQL_ROW cur_row;
     bool req_columns;
     bool need_columns;
@@ -267,7 +269,7 @@ class Client : public ObjectWrap {
 #undef X
 
     Client() {
-      DBG_LOG("constructor()\n");
+      DBG_LOG("Client()\n");
       state = STATE_CLOSED;
 
       is_destructing = false;
@@ -280,7 +282,7 @@ class Client : public ObjectWrap {
     }
 
     ~Client() {
-      DBG_LOG("~destructor()\n");
+      DBG_LOG("~Client()\n");
 #define X(name)       \
       if (on##name) \
         delete on##name;
@@ -395,6 +397,34 @@ class Client : public ObjectWrap {
       }
       return false;
     }
+
+    /*bool query(Statement* stmt, bool columns, bool metadata) {
+      DBG_LOG("query(stmt) state=%s,columns=%d,metadata=%d\n",
+              state_strings[state], columns, metadata);
+      if (state == STATE_IDLE) {
+        // lazy initialization
+        if (!stmt->stmt || !stmt->stmt->mysql) {
+          // libmariadbclient NULLs out the `mysql` property for all associated
+          // prepared statements on disconnect
+          if (stmt->stmt) {
+            // normally this will block, but since the `mysql` handle is gone
+            // it shouldn't do blocking network requests while doing any cleanup
+            // that may still be needed ...
+            mysql_stmt_close(stmt->stmt);
+          }
+          stmt->stmt = mysql_stmt_init(&mysql);
+          if (!stmt->stmt) // out of memory
+            return false;
+        }
+        cur_stmt = stmt;
+        req_columns = columns;
+        req_metadata = metadata;
+        state = STATE_PREPARE;
+        do_work();
+        return true;
+      }
+      return false;
+    }*/
 
     bool pause() {
       DBG_LOG("pause() state=%s,is_paused=%d\n",
@@ -1171,13 +1201,26 @@ class Client : public ObjectWrap {
         return NanThrowTypeError("Missing arguments");
       if (!args[0]->IsString())
         return NanThrowTypeError("query argument must be a string");
+      /*if (!args[0]->IsString() && !stmt_constructor->HasInstance(args[0])) {
+        return NanThrowTypeError(
+            "query argument must be a string or Statement instance"
+        );
+      }*/
       if (!args[1]->IsBoolean())
         return NanThrowTypeError("columns argument must be a boolean");
       if (!args[2]->IsBoolean())
         return NanThrowTypeError("metadata argument must be a boolean");
 
-      String::Utf8Value query(args[0]);
-      obj->query(*query, args[1]->BooleanValue(), args[2]->BooleanValue());
+      //if (args[0]->IsString()) {
+        String::Utf8Value query(args[0]);
+        obj->query(*(String::Utf8Value(args[0])),
+                   args[1]->BooleanValue(),
+                   args[2]->BooleanValue());
+      /*} else {
+        Local<Object> stmt_obj = args[0]->ToObject();
+        Statement* stmt = ObjectWrap::Unwrap<Statement>(stmt_obj);
+        obj->query(stmt, args[1]->BooleanValue(), args[2]->BooleanValue());
+      }*/
 
       NanReturnUndefined();
     }
@@ -1282,11 +1325,120 @@ static NAN_METHOD(Version) {
   NanReturnValue(NanNew<String>(mysql_get_client_info()));
 }
 
+// =============================================================================
+// TODO: Implement (completely) prepared statements.
+//       The C API for prepared statements is absolutely ridiculous and you
+//       couldn't pay me enough money to write a binding for that part of the
+//       API.
+/*class Statement : public ObjectWrap {
+  public:
+    MYSQL_STMT* stmt;
+    MYSQL_BIND* params;
+    uint32_t params_len;
+    char* query;
+    bool is_prepared = false;
+
+    Statement() {
+      DBG_LOG("Statement()\n");
+      stmt = NULL;
+      params = NULL;
+      params_len = 0;
+      query = NULL;
+      is_prepared = false;
+    }
+
+    ~Statement() {
+      DBG_LOG("~Statement()\n");
+      clear_params();
+      FREE(query);
+    }
+
+    void clear_params() {
+      if (params) {
+        for (int i=0; i<field_count; i++) {
+            (*result_data)[i] = (char *)malloc((STRING_SIZE+1) *  sizeof(char));
+        }
+      }
+    }
+
+    static NAN_METHOD(New) {
+      DBG_LOG("new Statement()\n");
+      NanScope();
+
+      if (!args.IsConstructCall()) {
+        return NanThrowTypeError(
+          "Use `new` to create instances of this object."
+        );
+      }
+
+      if (args.Length() == 0 || !args[0]->IsString())
+        return NanThrowTypeError("Missing query string");
+
+      Statement *obj = new Statement();
+      obj->query = strdup(*(String::Utf8Value(args[0])));
+      obj->Wrap(args.This());
+
+      NanReturnValue(args.This());
+    }
+
+    static NAN_METHOD(Bind) {
+      DBG_LOG("statement->bind()\n");
+      NanScope();
+
+      if (args.Length() == 0 || !args[0]->IsArray())
+        return NanThrowTypeError("Missing array of parameters to bind");
+
+      Statement *obj = ObjectWrap::Unwrap<Statement>(args.This());
+      Local<Array> arr = Local<Array>::Cast(args[0]);
+      uint32_t len = arr->Length();
+
+      // validate param count early if our statement is already prepared
+      if (obj->stmt
+          && obj->is_prepared
+          && len != mysql_stmt_param_count(obj->stmt))
+        return NanThrowError("Wrong parameter count");
+
+      obj->clear_params();
+
+      uint32_t old_params_len = obj->params_len;
+      if (old_params_len != len) {
+        FREE(obj->params);
+        obj->params = malloc(sizeof(MYSQL_BIND) * len);
+        obj->params_len = len;
+      }
+      MYSQL_BIND params[] = obj->params;
+      for (uint32_t i = 0; i < len; ++i) {
+        Local<Value> val = arr->Get(i);
+        if (val->IsString()) {
+          
+        }
+      }
+
+      NanReturnUndefined();
+    }
+    
+    static void Initialize(Handle<Object> target) {
+      NanScope();
+
+      Local<FunctionTemplate> tpl = NanNew<FunctionTemplate>(New);
+
+      NanAssignPersistent(stmt_constructor, tpl);
+      tpl->InstanceTemplate()->SetInternalFieldCount(1);
+      tpl->SetClassName(NanNew<String>("Statement"));
+
+      NODE_SET_PROTOTYPE_METHOD(tpl, "bind", Bind);
+
+      target->Set(NanNew<String>("Statement"), tpl->GetFunction());
+    }
+};*/
+// =============================================================================
+
 extern "C" {
   void init(Handle<Object> target) {
     NanScope();
 
     Client::Initialize(target);
+    //Statement::Initialize(target);
     target->Set(NanNew<String>("escape"),
                 NanNew<FunctionTemplate>(Escape)->GetFunction());
     target->Set(NanNew<String>("version"),
