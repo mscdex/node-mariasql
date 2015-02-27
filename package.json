@@ -6,7 +6,7 @@
   "engines": { "node": ">=0.8.0" },
   "dependencies": {
     "lru-cache": "2.3.1",
-    "nan": "git+https://github.com/rvagg/nan.git#master"
+    "nan": "rvagg/nan#8d54da7ff013d9aebe2b18f04cbc69f3f018f3c6"
   },
   "keywords": [ "mysql", "sql", "client", "mariadb", "async", "nonblocking" ],
   "licenses": [ { "type": "MIT", "url": "http://github.com/mscdex/node-mariasql/raw/master/LICENSE" } ],
