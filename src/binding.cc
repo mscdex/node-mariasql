@@ -39,7 +39,8 @@ using namespace v8;
   X(ROW, 5)                           \
   X(NEXTRESULT, 6)                    \
   X(FREERESULT, 7)                    \
-  X(PING, 8)
+  X(STORERESULT, 8)                   \
+  X(PING, 9)
 #define EVENT_NAMES                   \
   X(connect)                          \
   X(error)                            \
@@ -253,6 +254,7 @@ class Client : public ObjectWrap {
     bool is_aborting;
     bool is_destructing;
     bool is_paused;
+    bool is_buffering;
     char* cur_query;
     MYSQL_RES* cur_result;
     //MYSQL_STMT* cur_stmt;
@@ -381,13 +383,14 @@ class Client : public ObjectWrap {
       return false;
     }
 
-    bool query(const char *qry, bool columns, bool metadata) {
-      DBG_LOG("query() state=%s,columns=%d,metadata=%d,query=%s\n",
-              state_strings[state], columns, metadata, qry);
+    bool query(const char *qry, bool columns, bool metadata, bool buffer) {
+      DBG_LOG("query() state=%s,columns=%d,metadata=%d,buffer=%d,query=%s\n",
+              state_strings[state], columns, metadata, buffer, qry);
       if (state == STATE_IDLE) {
         cur_query = (char*)qry;
         req_columns = columns;
         req_metadata = metadata;
+        is_buffering = buffer;
         state = STATE_QUERY;
         do_work();
         return true;
@@ -547,8 +550,12 @@ class Client : public ObjectWrap {
                   state = STATE_IDLE;
                   on_error();
                   on_idle();
-                } else
-                  state = STATE_RESULT;
+                } else {
+                  if (is_buffering)
+                    state = STATE_STORERESULT;
+                  else
+                    state = STATE_RESULT;
+                }
               }
             } else {
               status = mysql_real_query_cont(&err, &mysql, event);
@@ -560,8 +567,12 @@ class Client : public ObjectWrap {
                   state = STATE_IDLE;
                   on_error();
                   on_idle();
-                } else
-                  state = STATE_RESULT;
+                } else {
+                  if (is_buffering)
+                    state = STATE_STORERESULT;
+                  else
+                    state = STATE_RESULT;
+                }
               }
             }
           break;
@@ -649,8 +660,12 @@ class Client : public ObjectWrap {
                     on_idle();
                     return;
                   }
-                } else
-                  state = STATE_RESULT;
+                } else {
+                  if (is_buffering)
+                    state = STATE_STORERESULT;
+                  else
+                    state = STATE_RESULT;
+                }
               }
             } else {
               status = mysql_next_result_cont(&err, &mysql, event);
@@ -666,8 +681,12 @@ class Client : public ObjectWrap {
                     on_idle();
                     return;
                   }
-                } else
-                  state = STATE_RESULT;
+                } else {
+                  if (is_buffering)
+                    state = STATE_STORERESULT;
+                  else
+                    state = STATE_RESULT;
+                }
               }
             }
           break;
@@ -699,6 +718,39 @@ class Client : public ObjectWrap {
                   on_idle();
                   return;
                 }
+              }
+            }
+          break;
+          case STATE_STORERESULT:
+            if (!is_cont) {
+              need_columns = req_columns;
+              need_metadata = req_metadata;
+              status = mysql_store_result_start(&cur_result, &mysql);
+              if (status) {
+                done = true;
+                is_cont = true;
+              } else {
+                if (mysql_errno(&mysql))
+                  on_error();
+                else {
+                  on_rows();
+                  on_resultend();
+                }
+                state = STATE_FREERESULT;
+              }
+            } else {
+              status = mysql_store_result_cont(&cur_result, &mysql, event);
+              if (status)
+                done = true;
+              else {
+                is_cont = false;
+                if (mysql_errno(&mysql))
+                  on_error();
+                else {
+                  on_rows();
+                  on_resultend();
+                }
+                state = STATE_FREERESULT;
               }
             }
           break;
@@ -822,27 +874,101 @@ class Client : public ObjectWrap {
               state_strings[state], need_columns, need_metadata);
       NanScope();
 
-      MYSQL_FIELD field;
-      MYSQL_FIELD *fields;
       unsigned int n_fields = mysql_num_fields(cur_result);
-      unsigned int f = 0;
-      unsigned int i = 0;
-      unsigned int m = 0;
-      unsigned int vlen;
-      unsigned char *buf;
-      uint16_t *new_buf;
-      unsigned long *lengths;
-      Handle<Value> field_value;
-      Local<Array> row;
 
       if (n_fields == 0)
         return;
 
-      lengths = mysql_fetch_lengths(cur_result);
-      fields = mysql_fetch_fields(cur_result);
-      row = NanNew<Array>(n_fields);
+      MYSQL_FIELD* fields = mysql_fetch_fields(cur_result);
+      unsigned long* lengths = mysql_fetch_lengths(cur_result);
+      Handle<Value> field_value;
+      Local<Array> row = NanNew<Array>(n_fields);
+      // binary field vars
+      unsigned int vlen;
+      unsigned char* buf;
+      uint16_t* new_buf;
 
+      on_resultinfo(fields, n_fields);
+
+      for (unsigned int f = 0; f < n_fields; ++f) {
+        if (cur_row[f] == NULL)
+          field_value = NanNull();
+        else if (IS_BINARY(fields[f])) {
+          vlen = lengths[f];
+          buf = (unsigned char*)(cur_row[f]);
+          new_buf = new uint16_t[vlen];
+          for (unsigned int i = 0; i < vlen; ++i)
+            new_buf[i] = buf[i];
+          field_value = NanNew<String>(new_buf, vlen);
+          delete[] new_buf;
+        } else
+          field_value = NanNew<String>(cur_row[f], lengths[f]);
+
+        row->Set(f, field_value);
+      }
+
+      Handle<Value> argv[1] = {
+        row
+      };
+      onrow->Call(NanNew<Object>(context), 1, argv);
+    }
+
+    void on_rows() {
+      DBG_LOG("on_rows() state=%s,need_columns=%d,need_metadata=%d\n",
+              state_strings[state], need_columns, need_metadata);
+      NanScope();
+
+      unsigned int n_fields = mysql_num_fields(cur_result);
+
+      if (n_fields == 0)
+        return;
+
+      MYSQL_FIELD* fields = mysql_fetch_fields(cur_result);
+      MYSQL_ROW dbrow;
+      int n_rows = mysql_num_rows(cur_result);
+      unsigned long* lengths;
+      Handle<Value> field_value;
+      Local<Array> row;
+      Local<Array> rows = NanNew<Array>(n_rows);
+      // binary field vars
+      unsigned int vlen;
+      unsigned char* buf;
+      uint16_t *new_buf;
+
+      on_resultinfo(fields, n_fields);
+
+      for (unsigned int i = 0; i < n_rows; ++i) {
+        dbrow = mysql_fetch_row(cur_result);
+        lengths = mysql_fetch_lengths(cur_result);
+        row = NanNew<Array>(n_fields);
+        for (unsigned int f = 0; f < n_fields; ++f) {
+          if (dbrow[f] == NULL)
+            field_value = NanNull();
+          else if (IS_BINARY(fields[f])) {
+            vlen = lengths[f];
+            buf = (unsigned char*)(dbrow[f]);
+            new_buf = new uint16_t[vlen];
+            for (i = 0; i < vlen; ++i)
+              new_buf[i] = buf[i];
+            field_value = NanNew<String>(new_buf, vlen);
+            delete[] new_buf;
+          } else
+            field_value = NanNew<String>(dbrow[f], lengths[f]);
+          row->Set(f, field_value);
+        }
+        rows->Set(i, row);
+      }
+
+      Handle<Value> argv[1] = {
+        rows
+      };
+      onrow->Call(NanNew<Object>(context), 1, argv);
+    }
+
+    void on_resultinfo(MYSQL_FIELD* fields, unsigned int n_fields) {
       if (need_metadata || need_columns) {
+        MYSQL_FIELD field;
+        unsigned int m = 0;
         Local<Array> columns;
         Local<Array> metadata;
         Local<Value> columns_v;
@@ -857,7 +983,7 @@ class Client : public ObjectWrap {
         else
           columns_v = NanUndefined();
 
-        for (f = 0; f < n_fields; ++f) {
+        for (unsigned int f = 0; f < n_fields; ++f) {
           field = fields[f];
           if (need_metadata) {
             Local<String> ret;
@@ -889,27 +1015,6 @@ class Client : public ObjectWrap {
         Handle<Value> resinfo_argv[2] = { columns_v, metadata_v };
         onresultinfo->Call(NanNew<Object>(context), 2, resinfo_argv);
       }
-
-      for (f = 0; f < n_fields; ++f) {
-        if (cur_row[f] == NULL)
-          field_value = NanNull();
-        else if (IS_BINARY(fields[f])) {
-          vlen = lengths[f];
-          buf = (unsigned char*)(cur_row[f]);
-          new_buf = new uint16_t[vlen];
-          for (i = 0; i < vlen; ++i)
-            new_buf[i] = buf[i];
-          field_value = NanNew<String>(new_buf, vlen);
-          delete[] new_buf;
-        } else
-          field_value = NanNew<String>(cur_row[f], lengths[f]);
-
-        row->Set(f, field_value);
-      }
-      Handle<Value> argv[1] = {
-        row
-      };
-      onrow->Call(NanNew<Object>(context), 1, argv);
     }
 
     void on_resultend() {
@@ -1207,12 +1312,15 @@ class Client : public ObjectWrap {
         return NanThrowTypeError("columns argument must be a boolean");
       if (!args[2]->IsBoolean())
         return NanThrowTypeError("metadata argument must be a boolean");
+      if (!args[3]->IsBoolean())
+        return NanThrowTypeError("buffered argument must be a boolean");
 
       //if (args[0]->IsString()) {
         String::Utf8Value query(args[0]);
         obj->query(*(String::Utf8Value(args[0])),
                    args[1]->BooleanValue(),
-                   args[2]->BooleanValue());
+                   args[2]->BooleanValue(),
+                   args[3]->BooleanValue());
       /*} else {
         Local<Object> stmt_obj = args[0]->ToObject();
         Statement* stmt = ObjectWrap::Unwrap<Statement>(stmt_obj);
