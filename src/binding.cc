@@ -459,6 +459,8 @@ class Client : public ObjectWrap {
     }
 
     void do_work(int event = 0) {
+      if (state == STATE_CLOSED)
+        return;
       DBG_LOG("do_work() state=%s,event=%s\n",
               state_strings[state],
               ((event & (UV_READABLE|UV_WRITABLE)) == (UV_READABLE|UV_WRITABLE)
