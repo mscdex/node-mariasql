@@ -140,25 +140,25 @@ CFG_OPTIONS_SSL
 #undef X
 
 struct sql_config {
-  char *user;
-  char *password;
-  char *host;
+  char* user;
+  char* password;
+  char* host;
   unsigned int port;
-  char *unixSocket;
-  char *db;
+  char* unixSocket;
+  char* db;
   unsigned long client_opts;
   unsigned int tcpka;
   unsigned int tcpkaCnt;
   unsigned int tcpkaIntvl;
   bool metadata;
-  char *charset;
+  char* charset;
 
   // ssl
-  char *ssl_key;
-  char *ssl_cert;
-  char *ssl_ca;
-  char *ssl_capath;
-  char *ssl_cipher;
+  char* ssl_key;
+  char* ssl_cert;
+  char* ssl_ca;
+  char* ssl_capath;
+  char* ssl_cipher;
 };
 
 const my_bool MY_BOOL_TRUE = 1;
@@ -266,7 +266,7 @@ class Client : public ObjectWrap {
     int state;
     int last_status;
 #define X(name)  \
-    NanCallback *on##name;
+    NanCallback* on##name;
     EVENT_NAMES
 #undef X
 
@@ -383,7 +383,7 @@ class Client : public ObjectWrap {
       return false;
     }
 
-    bool query(const char *qry, bool columns, bool metadata, bool buffer) {
+    bool query(const char* qry, bool columns, bool metadata, bool buffer) {
       DBG_LOG("query() state=%s,columns=%d,metadata=%d,buffer=%d,query=%s\n",
               state_strings[state], columns, metadata, buffer, qry);
       if (state == STATE_IDLE) {
@@ -457,7 +457,7 @@ class Client : public ObjectWrap {
       return false;
     }
 
-    unsigned long escape(const char *src, unsigned long src_len, char* dest) {
+    unsigned long escape(const char* src, unsigned long src_len, char* dest) {
       return mysql_real_escape_string(&mysql, dest, src, src_len);
     }
 
@@ -821,16 +821,16 @@ class Client : public ObjectWrap {
                    : "NONE"));
     }
 
-    static void cb_close(uv_handle_t *handle) {
-      Client *obj = (Client*)handle->data;
+    static void cb_close(uv_handle_t* handle) {
+      Client* obj = (Client*)handle->data;
       DBG_LOG("cb_close() state=%s\n", state_strings[obj->state]);
 
       FREE(obj->poll_handle);
       obj->onclose->Call(NanNew<Object>(obj->context), 0, NULL);
     }
 
-    static void cb_poll(uv_poll_t *handle, int status, int events) {
-      Client *obj = (Client*)handle->data;
+    static void cb_poll(uv_poll_t* handle, int status, int events) {
+      Client* obj = (Client*)handle->data;
       DBG_LOG("cb_poll() state=%s\n", state_strings[obj->state]);
 
       assert(status == 0);
@@ -850,7 +850,7 @@ class Client : public ObjectWrap {
     }
 
     void on_error(bool doClose = false, unsigned int errNo = 0,
-                  const char *errMsg = NULL) {
+                  const char* errMsg = NULL) {
       DBG_LOG("on_error() state=%s\n", state_strings[state]);
       NanScope();
       unsigned int errCode = mysql_errno(&mysql);
@@ -933,7 +933,7 @@ class Client : public ObjectWrap {
       // binary field vars
       unsigned int vlen;
       unsigned char* buf;
-      uint16_t *new_buf;
+      uint16_t* new_buf;
 
       on_resultinfo(fields, n_fields);
 
@@ -1212,7 +1212,7 @@ class Client : public ObjectWrap {
       Local<Value> context_v = cfg->Get(NanNew<String>(context_symbol));
       Local<Value> conncfg_v = cfg->Get(NanNew<String>(conncfg_symbol));
 
-      Client *obj = new Client();
+      Client* obj = new Client();
 
 #define X(name)                                                                \
       obj->on##name = new NanCallback(Local<Function>::Cast(v_on##name));
@@ -1232,7 +1232,7 @@ class Client : public ObjectWrap {
     static NAN_METHOD(SetConfig) {
       DBG_LOG("client->setConfig()\n");
       NanScope();
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
 
       if (args.Length() > 0 && args[0]->IsObject()) {
         Local<Object> cfg = args[0]->ToObject();
@@ -1245,7 +1245,7 @@ class Client : public ObjectWrap {
     static NAN_METHOD(Connect) {
       DBG_LOG("client->connect()\n");
       NanScope();
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
 
       if (obj->state != STATE_CLOSED)
         return NanThrowError("Already connected");
@@ -1264,7 +1264,7 @@ class Client : public ObjectWrap {
     static NAN_METHOD(Close) {
       DBG_LOG("client->close()\n");
       NanScope();
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
 
       if (!obj->close())
         return NanThrowError("Not connected");
@@ -1275,7 +1275,7 @@ class Client : public ObjectWrap {
     static NAN_METHOD(Pause) {
       DBG_LOG("client->pause()\n");
       NanScope();
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
 
       obj->pause();
 
@@ -1285,7 +1285,7 @@ class Client : public ObjectWrap {
     static NAN_METHOD(Resume) {
       DBG_LOG("client->resume()\n");
       NanScope();
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
 
       obj->resume();
 
@@ -1295,7 +1295,7 @@ class Client : public ObjectWrap {
     static NAN_METHOD(Query) {
       DBG_LOG("client->query()\n");
       NanScope();
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
 
       if (obj->state != STATE_IDLE)
         return NanThrowError("Not ready to query");
@@ -1333,7 +1333,7 @@ class Client : public ObjectWrap {
     static NAN_METHOD(Escape) {
       DBG_LOG("client->escape()\n");
       NanScope();
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
 
       if (obj->state == STATE_CLOSED)
         return NanThrowError("Not connected");
@@ -1342,7 +1342,7 @@ class Client : public ObjectWrap {
 
       String::Utf8Value arg_v(args[0]);
       unsigned long arg_len = arg_v.length();
-      char *result = (char*) malloc(arg_len * 2 + 1);
+      char* result = (char*) malloc(arg_len * 2 + 1);
       unsigned long result_len = obj->escape((char*)*arg_v, arg_len, result);
       Local<String> escaped_s = NanNew<String>(result, result_len);
       free(result);
@@ -1352,7 +1352,7 @@ class Client : public ObjectWrap {
     static NAN_METHOD(IsMariaDB) {
       DBG_LOG("client->isMariaDB()\n");
       NanScope();
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
 
       if (obj->state == STATE_CLOSED)
         return NanThrowError("Not connected");
@@ -1413,7 +1413,7 @@ static NAN_METHOD(Escape) {
 
   String::Utf8Value arg_v(args[0]);
   unsigned long arg_len = arg_v.length();
-  char *result = (char*) malloc(arg_len * 2 + 1);
+  char* result = (char*) malloc(arg_len * 2 + 1);
   unsigned long result_len =
       mysql_escape_string_ex(result, (char*)*arg_v, arg_len, "utf8");
   Local<String> escaped_s = NanNew<String>(result, result_len);
