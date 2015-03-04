@@ -897,8 +897,8 @@ class Client : public ObjectWrap {
           vlen = lengths[f];
           buf = (unsigned char*)(cur_row[f]);
           new_buf = new uint16_t[vlen];
-          for (unsigned int i = 0; i < vlen; ++i)
-            new_buf[i] = buf[i];
+          for (unsigned long b = 0; b < vlen; ++b)
+            new_buf[b] = buf[b];
           field_value = NanNew<String>(new_buf, vlen);
           delete[] new_buf;
         } else
@@ -937,7 +937,7 @@ class Client : public ObjectWrap {
 
       on_resultinfo(fields, n_fields);
 
-      for (unsigned int i = 0; i < n_rows; ++i) {
+      for (int i = 0; i < n_rows; ++i) {
         dbrow = mysql_fetch_row(cur_result);
         lengths = mysql_fetch_lengths(cur_result);
         row = NanNew<Array>(n_fields);
@@ -948,8 +948,8 @@ class Client : public ObjectWrap {
             vlen = lengths[f];
             buf = (unsigned char*)(dbrow[f]);
             new_buf = new uint16_t[vlen];
-            for (i = 0; i < vlen; ++i)
-              new_buf[i] = buf[i];
+            for (unsigned long b = 0; b < vlen; ++b)
+              new_buf[b] = buf[b];
             field_value = NanNew<String>(new_buf, vlen);
             delete[] new_buf;
           } else
@@ -1134,12 +1134,12 @@ class Client : public ObjectWrap {
                       *String::Utf8Value(read_default_group_v));
       }
 
-      if (tcpKeepalive_v->IsUint32()) {
+      if (tcpKeepalive_v->IsUint32())
         config.tcpka = tcpKeepalive_v->Uint32Value();
-        if (config.tcpka > 0) {
-          
-        }
-      }
+      if (tcpKeepaliveCnt_v->IsUint32())
+        config.tcpkaCnt = tcpKeepaliveCnt_v->Uint32Value();
+      if (tcpKeepaliveIntvl_v->IsUint32())
+        config.tcpkaIntvl = tcpKeepaliveIntvl_v->Uint32Value();
 
       if (charset_v->IsString() && charset_v->ToString()->Length() > 0) {
         config.charset = strdup(*(String::Utf8Value(charset_v)));
@@ -1147,9 +1147,8 @@ class Client : public ObjectWrap {
       }
 
       if (ssl_v->IsObject() || (ssl_v->IsBoolean() && ssl_v->BooleanValue())) {
-        if (ssl_v->IsBoolean())
-          config.ssl_cipher = DEFAULT_CIPHER;
-        else {
+        bool use_default_ciphers = true;
+        if (!ssl_v->IsBoolean()) {
           Local<Object> ssl = ssl_v->ToObject();
 #define X(name)                                                 \
           Local<Value> name##_v =                               \
@@ -1165,10 +1164,10 @@ class Client : public ObjectWrap {
             config.ssl_ca = strdup(*(String::Utf8Value(ca_v)));
           if (capath_v->IsString() && capath_v->ToString()->Length() > 0)
             config.ssl_capath = strdup(*(String::Utf8Value(capath_v)));
-          if (cipher_v->IsString() && cipher_v->ToString()->Length() > 0)
+          if (cipher_v->IsString() && cipher_v->ToString()->Length() > 0) {
             config.ssl_cipher = strdup(*(String::Utf8Value(cipher_v)));
-          else if (!(cipher_v->IsBoolean() && !cipher_v->BooleanValue()))
-            config.ssl_cipher = DEFAULT_CIPHER;
+            use_default_ciphers = false;
+          }
 
           mysql_options(&mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT,
                         (rejectUnauthorized_v->IsBoolean()
@@ -1182,7 +1181,7 @@ class Client : public ObjectWrap {
                       config.ssl_cert,
                       config.ssl_ca,
                       config.ssl_capath,
-                      config.ssl_cipher);
+                      use_default_ciphers ? DEFAULT_CIPHER : config.ssl_cipher);
       }
 
       // always disable auto-reconnect
