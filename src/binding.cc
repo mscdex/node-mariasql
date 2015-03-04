@@ -1291,6 +1291,16 @@ class Client : public ObjectWrap {
       NanReturnUndefined();
     }
 
+    static NAN_METHOD(Ping) {
+      DBG_LOG("client->ping()\n");
+      NanScope();
+      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+
+      obj->ping();
+
+      NanReturnUndefined();
+    }
+
     static NAN_METHOD(Query) {
       DBG_LOG("client->query()\n");
       NanScope();
@@ -1395,6 +1405,7 @@ class Client : public ObjectWrap {
       NODE_SET_PROTOTYPE_METHOD(tpl, "setConfig", SetConfig);
       NODE_SET_PROTOTYPE_METHOD(tpl, "pause", Pause);
       NODE_SET_PROTOTYPE_METHOD(tpl, "resume", Resume);
+      NODE_SET_PROTOTYPE_METHOD(tpl, "ping", Ping);
       NODE_SET_PROTOTYPE_METHOD(tpl, "escape", Escape);
       NODE_SET_PROTOTYPE_METHOD(tpl, "close", Close);
       NODE_SET_PROTOTYPE_METHOD(tpl, "isMariaDB", IsMariaDB);
