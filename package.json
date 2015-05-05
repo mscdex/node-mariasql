@@ -6,7 +6,7 @@
   "engines": { "node": ">=0.8.0" },
   "dependencies": {
     "lru-cache": "2.3.1",
-    "nan": "~1.7.0"
+    "nan": "^1.8.4"
   },
   "keywords": [ "mysql", "sql", "client", "mariadb", "async", "nonblocking" ],
   "licenses": [ { "type": "MIT", "url": "http://github.com/mscdex/node-mariasql/raw/master/LICENSE" } ],
