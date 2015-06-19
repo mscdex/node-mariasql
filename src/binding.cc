@@ -210,6 +210,7 @@ const my_bool MY_BOOL_FALSE = 0;
     return 0;
   }
 #else
+# include <errno.h>
   int set_keepalive(int fd, int on, unsigned int delay) {
     if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on)))
       return -errno;
