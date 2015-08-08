@@ -16,6 +16,13 @@
         'errmsg.c',
         'libmysql.c',
       ],
+      'conditions': [
+        [ 'OS=="win"', {
+            'sources': [
+              'snprintf.c',
+            ],
+        }],
+      ],
       'dependencies': [
         '../extra/yassl/taocrypt/taocrypt.gyp:taocrypt',
         '../extra/yassl/yassl.gyp:yassl',
