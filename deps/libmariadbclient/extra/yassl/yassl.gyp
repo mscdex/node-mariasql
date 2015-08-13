@@ -19,7 +19,7 @@
         'src/yassl_imp.cpp',
         'src/yassl_int.cpp',
       ],
-      'include_dirs': [
+      'include_dirs+': [
         '.',
         'include',
         'taocrypt/include',
