@@ -1,6 +1,3 @@
-#include <node.h>
-#include <node_buffer.h>
-#include <node_object_wrap.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -8,10 +5,9 @@
 #include <mysql.h>
 #include <nan.h>
 
-using namespace node;
 using namespace v8;
 
-static Persistent<FunctionTemplate> Client_constructor;
+static Nan::Persistent<FunctionTemplate> Client_constructor;
 
 const int STATE_NULL = -100,
           STATE_CLOSE = -2,
@@ -109,7 +105,7 @@ const my_bool MY_BOOL_TRUE = 1,
       return status != 0 && status == UV_EBADF;
     }
 #endif
-             
+
 
 #ifdef _WIN32
 # define CHECK_CONNRESET (WSAGetLastError() == WSAECONNRESET   ||  \
@@ -137,9 +133,9 @@ const my_bool MY_BOOL_TRUE = 1,
                        (f.type == MYSQL_TYPE_STRING)      || \
                        (f.type == MYSQL_TYPE_VAR_STRING)))
 
-class Client : public ObjectWrap {
+class Client : public Nan::ObjectWrap {
   public:
-    NanCallback *Emit;
+    Nan::Callback *Emit;
     uv_poll_t *poll_handle;
     uv_os_sock_t mysql_sock;
     MYSQL mysql, *mysql_ret;
@@ -231,18 +227,18 @@ class Client : public ObjectWrap {
     }
 
     static void cb_close(uv_handle_t *handle) {
-      NanScope();
+      Nan::HandleScope scope;
 
       Client *obj = (Client*) handle->data;
 
-      TryCatch try_catch;
-      Handle<Value> emit_argv[2] = {
-        NanNew<String>("close"),
-        NanNew<Boolean>(obj->had_error)
+      Nan::TryCatch try_catch;
+      Local<Value> emit_argv[2] = {
+        Nan::New("close").ToLocalChecked(),
+        Nan::New(obj->had_error)
       };
-      obj->Emit->Call(NanObjectWrapHandle(obj), 2, emit_argv);
+      obj->Emit->Call(obj->handle(), 2, emit_argv);
       if (try_catch.HasCaught())
-        FatalException(try_catch);
+        Nan::FatalException(try_catch);
       FREE(obj->poll_handle);
     }
 
@@ -285,7 +281,7 @@ class Client : public ObjectWrap {
                                               config.socket,
                                               config.client_opts);
             if (!mysql_ret && mysql_errno(&mysql) > 0)
-              return emit_error(NanNew<String>("conn.error"), true);
+              return emit_error(Nan::New("conn.error").ToLocalChecked(), true);
 
             mysql_sock = mysql_get_socket(&mysql);
 
@@ -301,7 +297,7 @@ class Client : public ObjectWrap {
               state = STATE_CONNECTING;
             } else {
               state = STATE_CONNECTED;
-              return emit(NanNew<String>("connect"));
+              return emit(Nan::New("connect").ToLocalChecked());
             }
             break;
           case STATE_CONNECTING:
@@ -311,9 +307,9 @@ class Client : public ObjectWrap {
               done = true;
             else {
               if (!mysql_ret)
-                return emit_error(NanNew<String>("conn.error"), true);
+                return emit_error(Nan::New("conn.error").ToLocalChecked(), true);
               state = STATE_CONNECTED;
-              return emit(NanNew<String>("connect"));
+              return emit(Nan::New("connect").ToLocalChecked());
             }
             break;
           case STATE_CONNECTED:
@@ -335,11 +331,11 @@ class Client : public ObjectWrap {
               } else {
                 if (!cur_query.err
                     || (cur_query.err && mysql_errno(&mysql) != 2013))
-                  emit(NanNew<String>("results.query"));
+                  emit(Nan::New("results.query").ToLocalChecked());
                 FREE(cur_query.str);
                 if (cur_query.err) {
                   state = STATE_NEXTQUERY;
-                  emit_error(NanNew<String>("query.error"));
+                  emit_error(Nan::New("query.error").ToLocalChecked());
                 } else
                   state = STATE_QUERIED;
               }
@@ -354,11 +350,11 @@ class Client : public ObjectWrap {
             else {
               if (!cur_query.err
                   || (cur_query.err && mysql_errno(&mysql) != 2013))
-                emit(NanNew<String>("results.query"));
+                emit(Nan::New("results.query").ToLocalChecked());
               FREE(cur_query.str);
               if (cur_query.err) {
                 state = STATE_NEXTQUERY;
-                emit_error(NanNew<String>("query.error"));
+                emit_error(Nan::New("query.error").ToLocalChecked());
               } else
                 state = STATE_QUERIED;
             }
@@ -368,7 +364,7 @@ class Client : public ObjectWrap {
             if (!cur_query.result) {
               state = STATE_NEXTQUERY;
               if (mysql_errno(&mysql) && !cur_query.abort)
-                emit_error(NanNew<String>("query.error"));
+                emit_error(Nan::New("query.error").ToLocalChecked());
               else if (!cur_query.abort) {
                 my_ulonglong insert_id = mysql_insert_id(&mysql),
                              affected_rows = mysql_affected_rows(&mysql);
@@ -424,9 +420,9 @@ class Client : public ObjectWrap {
             if (!mysql_more_results(&mysql)) {
               state = STATE_CONNECTED;
               if (cur_query.abort == ABORT_RESULTS)
-                emit(NanNew<String>("results.abort"));
+                emit(Nan::New("results.abort").ToLocalChecked());
               else
-                emit(NanNew<String>("results.done"));
+                emit(Nan::New("results.done").ToLocalChecked());
               if (cur_query.abort)
                 cur_query.abort = ABORT_NONE;
               return;
@@ -440,7 +436,7 @@ class Client : public ObjectWrap {
                 if (!cur_query.abort
                     && (!cur_query.err
                         || (cur_query.err && mysql_errno(&mysql) != 2013)))
-                  emit(NanNew<String>("results.query"));
+                  emit(Nan::New("results.query").ToLocalChecked());
                 if (cur_query.err) {
                   state = STATE_RESULTFREE;
                   deferred_state = STATE_ROWERR;
@@ -459,7 +455,7 @@ class Client : public ObjectWrap {
                 if (!cur_query.abort
                     && (!cur_query.err
                         || (cur_query.err && mysql_errno(&mysql) != 2013)))
-                emit(NanNew<String>("results.query"));
+                emit(Nan::New("results.query").ToLocalChecked());
               if (cur_query.err) {
                 state = STATE_RESULTFREE;
                 deferred_state = STATE_ROWERR;
@@ -475,19 +471,19 @@ class Client : public ObjectWrap {
               state = STATE_NEXTQUERY;
               if (cur_query.abort == ABORT_QUERY) {
                 cur_query.abort = ABORT_NONE;
-                emit(NanNew<String>("query.abort"));
+                emit(Nan::New("query.abort").ToLocalChecked());
               }
             }
             break;
           case STATE_QUERYERR:
             state = STATE_NEXTQUERY;
             if (!cur_query.abort)
-              emit_error(NanNew<String>("query.error"));
+              emit_error(Nan::New("query.error").ToLocalChecked());
             break;
           case STATE_ROWERR:
             state = STATE_NEXTQUERY;
             if (!cur_query.abort)
-              emit_error(NanNew<String>("query.row.error"));
+              emit_error(Nan::New("query.row.error").ToLocalChecked());
             break;
           case STATE_RESULTFREE:
             if (!cur_query.result)
@@ -534,7 +530,7 @@ class Client : public ObjectWrap {
     }
 
     static void cb_poll(uv_poll_t *handle, int status, int events) {
-      NanScope();
+      Nan::HandleScope scope;
 
       Client *obj = (Client*) handle->data;
 
@@ -547,7 +543,7 @@ class Client : public ObjectWrap {
         else
           errmsg += obj->config.ip;
         errmsg += "' (0)";
-        obj->emit_error(NanNew<String>("conn.error"), true, 2003, errmsg.c_str());
+        obj->emit_error(Nan::New("conn.error").ToLocalChecked(), true, 2003, errmsg.c_str());
         return;
       }
       assert(status == 0);
@@ -562,65 +558,65 @@ class Client : public ObjectWrap {
         int r = recv(obj->mysql_sock, conn_check_buf, 1, MSG_PEEK);
         if ((r == 0 || (r == -1 && CHECK_CONNRESET))
             && obj->state == STATE_CONNECTED) {
-          return obj->emit_error(NanNew<String>("conn.error"), true, ERROR_HANGUP,
+          return obj->emit_error(Nan::New("conn.error").ToLocalChecked(), true, ERROR_HANGUP,
                                  STR_ERROR_HANGUP);
         }
       }
       obj->do_work(mysql_status);
     }
 
-    void emit(Local<String>eventName) {
-      NanScope();
+    void emit(Local<String> eventName) {
+      Nan::HandleScope scope;
 
-      Handle<Value> emit_argv[1] = { eventName };
-      TryCatch try_catch;
-      Emit->Call(NanObjectWrapHandle(this), 1, emit_argv);
+      Local<Value> emit_argv[1] = { eventName };
+      Nan::TryCatch try_catch;
+      Emit->Call(handle(), 1, emit_argv);
       if (try_catch.HasCaught())
-        FatalException(try_catch);
+        Nan::FatalException(try_catch);
     }
 
     void emit_error(Local<String>eventName, bool doClose = false,
                    unsigned int errNo = 0, const char *errMsg = NULL) {
-      NanScope();
+      Nan::HandleScope scope;
 
       had_error = true;
       unsigned int errCode = mysql_errno(&mysql);
       if (errNo > 0)
         errCode = errNo;
       Local<Object> err =
-          Exception::Error(
-            NanNew<String>(errMsg ? errMsg : mysql_error(&mysql))
-          )->ToObject();
-      err->Set(NanNew<String>("code"), NanNew<Integer, uint32_t>(errCode));
-      Handle<Value> emit_argv[2] = { eventName, err };
-      TryCatch try_catch;
-      Emit->Call(NanObjectWrapHandle(this), 2, emit_argv);
+          Nan::Error(
+            Nan::New(errMsg ? errMsg : mysql_error(&mysql)).ToLocalChecked()
+          ).As<Object>();
+      Nan::Set(err, Nan::New("code").ToLocalChecked(), Nan::New<Uint32>(errCode));
+      Local<Value> emit_argv[2] = { eventName, err };
+      Nan::TryCatch try_catch;
+      Emit->Call(handle(), 2, emit_argv);
       if (try_catch.HasCaught())
-        FatalException(try_catch);
+        Nan::FatalException(try_catch);
       if (doClose || errCode == 2013 || errCode == ERROR_HANGUP)
         close();
     }
 
     void emit_done(my_ulonglong insert_id = 0, my_ulonglong affected_rows = 0,
                   my_ulonglong num_rows = 0) {
-      NanScope();
+      Nan::HandleScope scope;
 
-      Local<Object> info = NanNew<Object>();
-      info->Set(NanNew<String>("insertId"), NanNew<Number>(insert_id));
-      info->Set(NanNew<String>("affectedRows"),
-                NanNew<Number>(affected_rows == (my_ulonglong) - 1
+      Local<Object> info = Nan::New<Object>();
+      Nan::Set(info, Nan::New("insertId").ToLocalChecked(), Nan::New(static_cast<double>(insert_id)));
+      Nan::Set(info, Nan::New("affectedRows").ToLocalChecked(),
+                Nan::New(affected_rows == (my_ulonglong) - 1
                                 ? 0
-                                : affected_rows));
-      info->Set(NanNew<String>("numRows"), NanNew<Number>(num_rows));
-      Handle<Value> emit_argv[2] = { NanNew<String>("query.done"), info };
-      TryCatch try_catch;
-      Emit->Call(NanObjectWrapHandle(this), 2, emit_argv);
+                                : static_cast<double>(affected_rows)));
+      Nan::Set(info, Nan::New("numRows").ToLocalChecked(), Nan::New(static_cast<double>(num_rows)));
+      Local<Value> emit_argv[2] = { Nan::New("query.done").ToLocalChecked(), info };
+      Nan::TryCatch try_catch;
+      Emit->Call(handle(), 2, emit_argv);
       if (try_catch.HasCaught())
-        FatalException(try_catch);
+        Nan::FatalException(try_catch);
     }
 
     void emit_row() {
-      NanScope();
+      Nan::HandleScope scope;
 
       MYSQL_FIELD field, *fields;
       unsigned int f = 0, n_fields = mysql_num_fields(cur_query.result),
@@ -628,7 +624,7 @@ class Client : public ObjectWrap {
       unsigned char *buf;
       uint16_t *new_buf;
       unsigned long *lengths;
-      Handle<Value> field_value;
+      Local<Value> field_value;
       Local<Object> row, metadata, types, charsetNrs, dbs, tables, orgTables, names, orgNames;
       Local<String> fieldName;
 
@@ -637,94 +633,94 @@ class Client : public ObjectWrap {
       lengths = mysql_fetch_lengths(cur_query.result);
       fields = mysql_fetch_fields(cur_query.result);
       if (cur_query.use_array) {
-        row = NanNew<Array>(n_fields);
+        row = Nan::New<Array>(n_fields);
         if (config.metadata) {
-          types = NanNew<Array>(n_fields);
-          charsetNrs = NanNew<Array>(n_fields);
-          dbs = NanNew<Array>(n_fields);
-          tables = NanNew<Array>(n_fields);
-          orgTables = NanNew<Array>(n_fields);
-          names = NanNew<Array>(n_fields);
-          orgNames = NanNew<Array>(n_fields);
+          types = Nan::New<Array>(n_fields);
+          charsetNrs = Nan::New<Array>(n_fields);
+          dbs = Nan::New<Array>(n_fields);
+          tables = Nan::New<Array>(n_fields);
+          orgTables = Nan::New<Array>(n_fields);
+          names = Nan::New<Array>(n_fields);
+          orgNames = Nan::New<Array>(n_fields);
         }
       }
       else {
-        row = NanNew<Object>();
+        row = Nan::New<Object>();
         if (config.metadata) {
-          types = NanNew<Object>();
-          charsetNrs = NanNew<Object>();
-          dbs = NanNew<Object>();
-          tables = NanNew<Object>();
-          orgTables = NanNew<Object>();
-          names = NanNew<Object>();
-          orgNames = NanNew<Object>();
+          types = Nan::New<Object>();
+          charsetNrs = Nan::New<Object>();
+          dbs = Nan::New<Object>();
+          tables = Nan::New<Object>();
+          orgTables = Nan::New<Object>();
+          names = Nan::New<Object>();
+          orgNames = Nan::New<Object>();
         }
       }
       for (f = 0; f < n_fields; ++f) {
         field = fields[f];
 
         if (cur_query.row[f] == NULL)
-          field_value = NanNull();
+          field_value = Nan::Null();
         else if (IS_BINARY(fields[f])) {
           vlen = lengths[f];
           buf = (unsigned char*)(cur_query.row[f]);
           new_buf = new uint16_t[vlen];
           for (i = 0; i < vlen; ++i)
             new_buf[i] = buf[i];
-          field_value = NanNew<String>(new_buf, vlen);
+          field_value = Nan::New<String>(new_buf, vlen).ToLocalChecked();
           delete[] new_buf;
         } else
-          field_value = NanNew<String>(cur_query.row[f], lengths[f]);
+          field_value = Nan::New(cur_query.row[f], lengths[f]).ToLocalChecked();
 
         if (cur_query.use_array)
-          row->Set(f, field_value);
+          Nan::Set(row, f, field_value);
         else{
-          fieldName = NanNew(field.name, field.name_length);
-          row->Set(fieldName, field_value);
+          fieldName = Nan::New(field.name, field.name_length).ToLocalChecked();
+          Nan::Set(row, fieldName, field_value);
         }
 
         if (config.metadata) {
           if (cur_query.use_array) {
-            types->Set(f, NanNew<String>(FieldTypeToString(field.type)));
-            charsetNrs->Set(f, NanNew<Integer, uint32_t>(field.charsetnr));            
-            dbs->Set(f, NanNew<String>(field.db));
-            tables->Set(f, NanNew<String>(field.table));
-            orgTables->Set(f, NanNew<String>(field.org_table));
-            names->Set(f, NanNew<String>(field.name));
-            orgNames->Set(f, NanNew<String>(field.org_name));
+            Nan::Set(types, f, Nan::New(FieldTypeToString(field.type)).ToLocalChecked());
+            Nan::Set(charsetNrs, f, Nan::New<Uint32>(field.charsetnr));
+            Nan::Set(dbs, f, Nan::New(field.db).ToLocalChecked());
+            Nan::Set(tables, f, Nan::New(field.table).ToLocalChecked());
+            Nan::Set(orgTables, f, Nan::New(field.org_table).ToLocalChecked());
+            Nan::Set(names, f, Nan::New(field.name).ToLocalChecked());
+            Nan::Set(orgNames, f, Nan::New(field.org_name).ToLocalChecked());
           }
           else {
-            types->Set(fieldName, NanNew<String>(FieldTypeToString(field.type)));
-            charsetNrs->Set(fieldName, NanNew<Integer, uint32_t>(field.charsetnr));            
-            dbs->Set(fieldName, NanNew<String>(field.db));
-            tables->Set(fieldName, NanNew<String>(field.table));
-            orgTables->Set(fieldName, NanNew<String>(field.org_table));
-            names->Set(fieldName, NanNew<String>(field.name));
-            orgNames->Set(fieldName, NanNew<String>(field.org_name));
+            Nan::Set(types, fieldName, Nan::New(FieldTypeToString(field.type)).ToLocalChecked());
+            Nan::Set(charsetNrs, fieldName, Nan::New<Uint32>(field.charsetnr));
+            Nan::Set(dbs, fieldName, Nan::New(field.db).ToLocalChecked());
+            Nan::Set(tables, fieldName, Nan::New(field.table).ToLocalChecked());
+            Nan::Set(orgTables, fieldName, Nan::New(field.org_table).ToLocalChecked());
+            Nan::Set(names, fieldName, Nan::New(field.name).ToLocalChecked());
+            Nan::Set(orgNames, fieldName, Nan::New(field.org_name).ToLocalChecked());
           }
         }
       }
 
-      TryCatch try_catch;
+      Nan::TryCatch try_catch;
       if (config.metadata) {
-        metadata = NanNew<Object>();
-        metadata->Set(NanNew<String>("types"), types);
-        metadata->Set(NanNew<String>("charsetNrs"), charsetNrs);
-        metadata->Set(NanNew<String>("dbs"), dbs);
-        metadata->Set(NanNew<String>("tables"), tables);
-        metadata->Set(NanNew<String>("orgTables"), orgTables);
-        metadata->Set(NanNew<String>("names"), names);
-        metadata->Set(NanNew<String>("orgNames"), orgNames);
+        metadata = Nan::New<Object>();
+        Nan::Set(metadata, Nan::New("types").ToLocalChecked(), types);
+        Nan::Set(metadata, Nan::New("charsetNrs").ToLocalChecked(), charsetNrs);
+        Nan::Set(metadata, Nan::New("dbs").ToLocalChecked(), dbs);
+        Nan::Set(metadata, Nan::New("tables").ToLocalChecked(), tables);
+        Nan::Set(metadata, Nan::New("orgTables").ToLocalChecked(), orgTables);
+        Nan::Set(metadata, Nan::New("names").ToLocalChecked(), names);
+        Nan::Set(metadata, Nan::New("orgNames").ToLocalChecked(), orgNames);
 
-        Handle<Value> emit_argv[3] = { NanNew<String>("query.row"), row, metadata };
-        Emit->Call(NanObjectWrapHandle(this), 3, emit_argv);
+        Local<Value> emit_argv[3] = { Nan::New("query.row").ToLocalChecked(), row, metadata };
+        Emit->Call(handle(), 3, emit_argv);
       } else {
-        Handle<Value> emit_argv[2] = { NanNew<String>("query.row"), row };
-        Emit->Call(NanObjectWrapHandle(this), 2, emit_argv);
+        Local<Value> emit_argv[2] = { Nan::New("query.row").ToLocalChecked(), row };
+        Emit->Call(handle(), 2, emit_argv);
       }
 
       if (try_catch.HasCaught())
-        FatalException(try_catch);
+        Nan::FatalException(try_catch);
     }
 
     inline const char* FieldTypeToString(enum_field_types v)
@@ -764,171 +760,165 @@ class Client : public ObjectWrap {
     }
 
     static NAN_METHOD(New) {
-      NanScope();
-
-      if (!args.IsConstructCall()) {
-        return NanThrowError("Use `new` to create instances of this object.");
+      if (!info.IsConstructCall()) {
+        return Nan::ThrowError("Use `new` to create instances of this object.");
       }
 
       Client *obj = new Client();
-      obj->Wrap(args.This());
+      obj->Wrap(info.This());
       obj->Ref();
 
 
-      obj->Emit = new NanCallback( (NanObjectWrapHandle(obj)->Get(NanNew<String>("emit"))).As<Function>() );
+      obj->Emit = new Nan::Callback( (Nan::Get(obj->handle(), Nan::New("emit").ToLocalChecked())).ToLocalChecked().As<Function>() );
 
-      NanReturnThis();
+      info.GetReturnValue().Set(info.This());
     }
 
     static NAN_METHOD(Escape) {
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
-
-      NanScope();
+      Client *obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state < STATE_CONNECTED) {
-        return NanThrowError("Not connected");
-      } else if (args.Length() == 0 || !args[0]->IsString()) {
-        return NanThrowTypeError("You must supply a string");
+        return Nan::ThrowError("Not connected");
+      } else if (info.Length() == 0 || !info[0]->IsString()) {
+        return Nan::ThrowTypeError("You must supply a string");
       }
 
-      String::Utf8Value arg_v(args[0]);
+      Nan::Utf8String arg_v(info[0]);
       unsigned long arg_len = arg_v.length();
       char *result = (char*) malloc(arg_len * 2 + 1);
       unsigned long result_len = obj->escape((char*)*arg_v, arg_len, result);
-      Local<String> escaped_s = NanNew<String>(result, result_len);
+      Local<String> escaped_s = Nan::New(result, result_len).ToLocalChecked();
       free(result);
 
-      NanReturnValue(escaped_s);
+      info.GetReturnValue().Set(escaped_s);
     }
 
     static NAN_METHOD(Connect) {
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
-
-      NanScope();
+      Client *obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state != STATE_CLOSED) {
-        return NanThrowError("Not ready to connect");
-      } else if (!args[0]->IsObject()) {
-        return NanThrowTypeError("Missing configuration object");
+        return Nan::ThrowError("Not ready to connect");
+      } else if (!info[0]->IsObject()) {
+        return Nan::ThrowTypeError("Missing configuration object");
       }
 
       obj->init();
 
-      Local<Object> cfg = args[0]->ToObject();
-      Local<Value> user_v = cfg->Get(NanNew<String>("user"));
-      Local<Value> password_v = cfg->Get(NanNew<String>("password"));
-      Local<Value> ip_v = cfg->Get(NanNew<String>("host"));
-      Local<Value> port_v = cfg->Get(NanNew<String>("port"));
-      Local<Value> socket_v = cfg->Get(NanNew<String>("unixSocket"));
-      Local<Value> db_v = cfg->Get(NanNew<String>("db"));
-      Local<Value> timeout_v = cfg->Get(NanNew<String>("connTimeout"));
-      Local<Value> secauth_v = cfg->Get(NanNew<String>("secureAuth"));
-      Local<Value> multi_v = cfg->Get(NanNew<String>("multiStatements"));
-      Local<Value> compress_v = cfg->Get(NanNew<String>("compress"));
-      Local<Value> ssl_v = cfg->Get(NanNew<String>("ssl"));
-      Local<Value> metadata_v = cfg->Get(NanNew<String>("metadata"));
-      Local<Value> local_infile_v = cfg->Get(NanNew<String>("local_infile"));
-      Local<Value> default_file_v = cfg->Get(NanNew<String>("read_default_file"));
-      Local<Value> default_group_v = cfg->Get(NanNew<String>("read_default_group"));
-      Local<Value> charset_v = cfg->Get(NanNew<String>("charset"));
-      
-      if (!user_v->IsString() || user_v->ToString()->Length() == 0)
+      Local<Object> cfg = info[0].As<Object>();
+      Local<Value> user_v = Nan::Get(cfg, Nan::New("user").ToLocalChecked()).ToLocalChecked();
+      Local<Value> password_v = Nan::Get(cfg, Nan::New("password").ToLocalChecked()).ToLocalChecked();
+      Local<Value> ip_v = Nan::Get(cfg, Nan::New("host").ToLocalChecked()).ToLocalChecked();
+      Local<Value> port_v = Nan::Get(cfg, Nan::New("port").ToLocalChecked()).ToLocalChecked();
+      Local<Value> socket_v = Nan::Get(cfg, Nan::New("unixSocket").ToLocalChecked()).ToLocalChecked();
+      Local<Value> db_v = Nan::Get(cfg, Nan::New("db").ToLocalChecked()).ToLocalChecked();
+      Local<Value> timeout_v = Nan::Get(cfg, Nan::New("connTimeout").ToLocalChecked()).ToLocalChecked();
+      Local<Value> secauth_v = Nan::Get(cfg, Nan::New("secureAuth").ToLocalChecked()).ToLocalChecked();
+      Local<Value> multi_v = Nan::Get(cfg, Nan::New("multiStatements").ToLocalChecked()).ToLocalChecked();
+      Local<Value> compress_v = Nan::Get(cfg, Nan::New("compress").ToLocalChecked()).ToLocalChecked();
+      Local<Value> ssl_v = Nan::Get(cfg, Nan::New("ssl").ToLocalChecked()).ToLocalChecked();
+      Local<Value> metadata_v = Nan::Get(cfg, Nan::New("metadata").ToLocalChecked()).ToLocalChecked();
+      Local<Value> local_infile_v = Nan::Get(cfg, Nan::New("local_infile").ToLocalChecked()).ToLocalChecked();
+      Local<Value> default_file_v = Nan::Get(cfg, Nan::New("read_default_file").ToLocalChecked()).ToLocalChecked();
+      Local<Value> default_group_v = Nan::Get(cfg, Nan::New("read_default_group").ToLocalChecked()).ToLocalChecked();
+      Local<Value> charset_v = Nan::Get(cfg, Nan::New("charset").ToLocalChecked()).ToLocalChecked();
+
+      if (!user_v->IsString() || user_v.As<String>()->Length() == 0)
         obj->config.user = NULL;
       else {
-        String::Utf8Value user_s(user_v);
+        Nan::Utf8String user_s(user_v);
         obj->config.user = strdup(*user_s);
       }
 
-      if (!password_v->IsString() || password_v->ToString()->Length() == 0)
+      if (!password_v->IsString() || password_v.As<String>()->Length() == 0)
         obj->config.password = NULL;
       else {
-        String::Utf8Value password_s(password_v);
+        Nan::Utf8String password_s(password_v);
         obj->config.password = strdup(*password_s);
       }
 
-      if (!ip_v->IsString() || ip_v->ToString()->Length() == 0)
+      if (!ip_v->IsString() || ip_v.As<String>()->Length() == 0)
         obj->config.ip = NULL;
       else {
-        String::Utf8Value ip_s(ip_v);
+        Nan::Utf8String ip_s(ip_v);
         obj->config.ip = strdup(*ip_s);
       }
 
-      if (!socket_v->IsString() || socket_v->ToString()->Length() == 0)
+      if (!socket_v->IsString() || socket_v.As<String>()->Length() == 0)
         obj->config.socket = NULL;
       else {
-        String::Utf8Value socket_s(socket_v);
+        Nan::Utf8String socket_s(socket_v);
         obj->config.socket = strdup(*socket_s);
       }
 
-      if (!port_v->IsUint32() || port_v->Uint32Value() == 0)
+      if (!port_v->IsUint32() || Nan::To<uint32_t>(port_v).FromJust() == 0)
         obj->config.port = 3306;
       else
-        obj->config.port = port_v->Uint32Value();
+        obj->config.port = Nan::To<uint32_t>(port_v).FromJust();
 
-      if (db_v->IsString() && db_v->ToString()->Length() > 0) {
-        String::Utf8Value db_s(db_v);
+      if (db_v->IsString() && db_v.As<String>()->Length() > 0) {
+        Nan::Utf8String db_s(db_v);
         obj->config.db = strdup(*db_s);
       }
 
       unsigned int timeout = 10;
-      if (timeout_v->IsUint32() && timeout_v->Uint32Value() > 0)
-        timeout = timeout_v->Uint32Value();
+      if (timeout_v->IsUint32() && Nan::To<uint32_t>(timeout_v).FromJust() > 0)
+        timeout = Nan::To<uint32_t>(timeout_v).FromJust();
       mysql_options(&obj->mysql, MYSQL_OPT_CONNECT_TIMEOUT, &timeout);
 
-      if (local_infile_v->IsBoolean() && local_infile_v->BooleanValue()){
+      if (local_infile_v->IsBoolean() && Nan::To<bool>(local_infile_v).FromJust()){
         mysql_options(&obj->mysql, MYSQL_OPT_LOCAL_INFILE, &MY_BOOL_TRUE);
       }
 
-      if (default_file_v->IsString() && default_file_v->ToString()->Length() > 0) {
-        mysql_options(&obj->mysql, MYSQL_READ_DEFAULT_FILE, *String::Utf8Value(default_file_v));
-      } 
+      if (default_file_v->IsString() && default_file_v.As<String>()->Length() > 0) {
+        mysql_options(&obj->mysql, MYSQL_READ_DEFAULT_FILE, *Nan::Utf8String(default_file_v));
+      }
 
-      if (default_group_v->IsString() && default_group_v->ToString()->Length() > 0) {
-        mysql_options(&obj->mysql, MYSQL_READ_DEFAULT_GROUP, *String::Utf8Value(default_group_v));
-      }  
+      if (default_group_v->IsString() && default_group_v.As<String>()->Length() > 0) {
+        mysql_options(&obj->mysql, MYSQL_READ_DEFAULT_GROUP, *Nan::Utf8String(default_group_v));
+      }
 
       if (!secauth_v->IsBoolean()
-          || (secauth_v->IsBoolean() && secauth_v->BooleanValue()))
+          || (secauth_v->IsBoolean() && Nan::To<bool>(secauth_v).FromJust()))
         mysql_options(&obj->mysql, MYSQL_SECURE_AUTH, &MY_BOOL_TRUE);
       else
         mysql_options(&obj->mysql, MYSQL_SECURE_AUTH, &MY_BOOL_FALSE);
 
-      if (multi_v->IsBoolean() && multi_v->BooleanValue())
+      if (multi_v->IsBoolean() && Nan::To<bool>(multi_v).FromJust())
         obj->config.client_opts |= CLIENT_MULTI_STATEMENTS;
 
-      if (compress_v->IsBoolean() && compress_v->BooleanValue())
+      if (compress_v->IsBoolean() && Nan::To<bool>(compress_v).FromJust())
         mysql_options(&obj->mysql, MYSQL_OPT_COMPRESS, 0);
 
-      if (metadata_v->IsBoolean() && metadata_v->BooleanValue())
+      if (metadata_v->IsBoolean() && Nan::To<bool>(metadata_v).FromJust())
         obj->config.metadata = true;
 
       if (ssl_v->IsObject() || ssl_v->IsBoolean()) {
-        if (ssl_v->IsBoolean() && ssl_v->BooleanValue())
-          obj->config.ssl_cipher = DEFAULT_CIPHER;
+        if (ssl_v->IsBoolean() && Nan::To<bool>(ssl_v).FromJust())
+          obj->config.ssl_cipher = strdup(DEFAULT_CIPHER);
         if (ssl_v->IsObject()) {
-          Local<Object> ssl_opts = ssl_v->ToObject();
-          Local<Value> key = ssl_opts->Get(NanNew<String>("key"));
-          Local<Value> cert = ssl_opts->Get(NanNew<String>("cert"));
-          Local<Value> ca = ssl_opts->Get(NanNew<String>("ca"));
-          Local<Value> capath = ssl_opts->Get(NanNew<String>("capath"));
-          Local<Value> cipher = ssl_opts->Get(NanNew<String>("cipher"));
-          Local<Value> reject = ssl_opts->Get(NanNew<String>("rejectUnauthorized"));
+          Local<Object> ssl_opts = ssl_v.As<Object>();
+          Local<Value> key = Nan::Get(ssl_opts, Nan::New("key").ToLocalChecked()).ToLocalChecked();
+          Local<Value> cert = Nan::Get(ssl_opts, Nan::New("cert").ToLocalChecked()).ToLocalChecked();
+          Local<Value> ca = Nan::Get(ssl_opts, Nan::New("ca").ToLocalChecked()).ToLocalChecked();
+          Local<Value> capath = Nan::Get(ssl_opts, Nan::New("capath").ToLocalChecked()).ToLocalChecked();
+          Local<Value> cipher = Nan::Get(ssl_opts, Nan::New("cipher").ToLocalChecked()).ToLocalChecked();
+          Local<Value> reject = Nan::Get(ssl_opts, Nan::New("rejectUnauthorized").ToLocalChecked()).ToLocalChecked();
 
-          if (key->IsString() && key->ToString()->Length() > 0)
-            obj->config.ssl_key = strdup(*(String::Utf8Value(key)));
-          if (cert->IsString() && cert->ToString()->Length() > 0)
-            obj->config.ssl_cert = strdup(*(String::Utf8Value(cert)));
-          if (ca->IsString() && ca->ToString()->Length() > 0)
-            obj->config.ssl_ca = strdup(*(String::Utf8Value(ca)));
-          if (capath->IsString() && capath->ToString()->Length() > 0)
-            obj->config.ssl_capath = strdup(*(String::Utf8Value(capath)));
-          if (cipher->IsString() && cipher->ToString()->Length() > 0)
-            obj->config.ssl_cipher = strdup(*(String::Utf8Value(cipher)));
-          else if (!(cipher->IsBoolean() && !cipher->BooleanValue()))
-            obj->config.ssl_cipher = DEFAULT_CIPHER;
+          if (key->IsString() && key.As<String>()->Length() > 0)
+            obj->config.ssl_key = strdup(*(Nan::Utf8String(key)));
+          if (cert->IsString() && cert.As<String>()->Length() > 0)
+            obj->config.ssl_cert = strdup(*(Nan::Utf8String(cert)));
+          if (ca->IsString() && ca.As<String>()->Length() > 0)
+            obj->config.ssl_ca = strdup(*(Nan::Utf8String(ca)));
+          if (capath->IsString() && capath.As<String>()->Length() > 0)
+            obj->config.ssl_capath = strdup(*(Nan::Utf8String(capath)));
+          if (cipher->IsString() && cipher.As<String>()->Length() > 0)
+            obj->config.ssl_cipher = strdup(*(Nan::Utf8String(cipher)));
+          else if (!(cipher->IsBoolean() && !Nan::To<bool>(cipher).FromJust()))
+            obj->config.ssl_cipher = strdup(DEFAULT_CIPHER);
 
           mysql_options(&obj->mysql, MYSQL_OPT_SSL_VERIFY_SERVER_CERT,
-                        (reject->IsBoolean() && reject->BooleanValue()
+                        (reject->IsBoolean() && Nan::To<bool>(reject).FromJust()
                          ? &MY_BOOL_TRUE
                          : &MY_BOOL_FALSE));
         } else {
@@ -943,131 +933,112 @@ class Client : public ObjectWrap {
                       obj->config.ssl_capath,
                       obj->config.ssl_cipher);
       }
-      if (charset_v->IsString() && charset_v->ToString()->Length() > 0) {
-        obj->config.charset = strdup(*(String::Utf8Value(charset_v)));
-        mysql_options(&obj->mysql, MYSQL_SET_CHARSET_NAME, obj->config.charset); 
+      if (charset_v->IsString() && charset_v.As<String>()->Length() > 0) {
+        obj->config.charset = strdup(*(Nan::Utf8String(charset_v)));
+        mysql_options(&obj->mysql, MYSQL_SET_CHARSET_NAME, obj->config.charset);
       }
-      
-      obj->connect();
 
-      NanReturnUndefined();
+      obj->connect();
     }
 
     static NAN_METHOD(AbortQuery) {
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client *obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
-      NanScope();
-
-      if (args.Length() == 0 || !args[0]->IsUint32()) {
-        return NanThrowTypeError("Missing abort level");
+      if (info.Length() == 0 || !info[0]->IsUint32()) {
+        return Nan::ThrowTypeError("Missing abort level");
       }
-      obj->abort_query((abort_t)args[0]->Uint32Value());
-      
-      NanReturnUndefined();
+      obj->abort_query((abort_t) Nan::To<uint32_t>(info[0]).FromJust());
+
     }
 
     static NAN_METHOD(Query) {
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
-
-      NanScope();
+      Client *obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state != STATE_CONNECTED) {
-        return NanThrowError("Not ready to query");
+        return Nan::ThrowError("Not ready to query");
       }
-      if (args.Length() == 0 || !args[0]->IsString()) {
-        return NanThrowTypeError("Query expected");
+      if (info.Length() == 0 || !info[0]->IsString()) {
+        return Nan::ThrowTypeError("Query expected");
       }
-      String::Utf8Value query(args[0]);
+      Nan::Utf8String query(info[0]);
       obj->query(*query,
-                 (args.Length() > 1 && args[1]->IsBoolean()
-                  && args[1]->BooleanValue()));
-      
-      NanReturnUndefined();
+                 (info.Length() > 1 && info[1]->IsBoolean()
+                  && Nan::To<bool>(info[1]).FromJust()));
     }
 
     static NAN_METHOD(Close) {
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
-
-      NanScope();
+      Client *obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state == STATE_CLOSED) {
-        return NanThrowError("Already closed");
+        return Nan::ThrowError("Already closed");
       }
       obj->close();
       obj->Unref();
-
-      NanReturnUndefined();
     }
 
     static NAN_METHOD(IsMariaDB) {
-      Client *obj = ObjectWrap::Unwrap<Client>(args.This());
-
-      NanScope();
+      Client *obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state < STATE_CONNECTED) {
-        return NanThrowError("Not connected");
+        return Nan::ThrowError("Not connected");
       }
-      
-      NanReturnValue( NanNew<Boolean>(mariadb_connection(&obj->mysql) == 1) );
+
+      info.GetReturnValue().Set(mariadb_connection(&obj->mysql) == 1);
     }
 
-    static void Initialize(Handle<Object> target) {
-      NanScope();
+    static NAN_MODULE_INIT(Initialize) {
+      Nan::HandleScope scope;
 
-      Local<String> name = NanNew<String>("Client");
+      Local<String> name = Nan::New("Client").ToLocalChecked();
 
-      Local<FunctionTemplate> tpl = NanNew<FunctionTemplate>(New);
+      Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
       tpl->InstanceTemplate()->SetInternalFieldCount(1);
       tpl->SetClassName(name);
 
-      NanAssignPersistent(Client_constructor, tpl);
+      Client_constructor.Reset(tpl);
 
-      NODE_SET_PROTOTYPE_METHOD(tpl, "connect", Connect);
-      NODE_SET_PROTOTYPE_METHOD(tpl, "query", Query);
-      NODE_SET_PROTOTYPE_METHOD(tpl, "abortQuery", AbortQuery);
-      NODE_SET_PROTOTYPE_METHOD(tpl, "escape", Escape);
-      NODE_SET_PROTOTYPE_METHOD(tpl, "end", Close);
-      NODE_SET_PROTOTYPE_METHOD(tpl, "isMariaDB", IsMariaDB);
+      Nan::SetPrototypeMethod(tpl, "connect", Connect);
+      Nan::SetPrototypeMethod(tpl, "query", Query);
+      Nan::SetPrototypeMethod(tpl, "abortQuery", AbortQuery);
+      Nan::SetPrototypeMethod(tpl, "escape", Escape);
+      Nan::SetPrototypeMethod(tpl, "end", Close);
+      Nan::SetPrototypeMethod(tpl, "isMariaDB", IsMariaDB);
 
       // Make it visible in JavaScript land
-      target->Set(name, tpl->GetFunction());
+      Nan::Set(target, name, Nan::GetFunction(tpl).ToLocalChecked());
     }
 };
 
 static NAN_METHOD(Escape) {
-  NanScope();
-
-  if (args.Length() == 0 || !args[0]->IsString()) {
-    return NanThrowTypeError("You must supply a string");
+  if (info.Length() == 0 || !info[0]->IsString()) {
+    return Nan::ThrowTypeError("You must supply a string");
   }
 
-  String::Utf8Value arg_v(args[0]);
+  Nan::Utf8String arg_v(info[0]);
   unsigned long arg_len = arg_v.length();
   char *result = (char*) malloc(arg_len * 2 + 1);
-  unsigned long result_len = 
+  unsigned long result_len =
         mysql_escape_string_ex(result, (char*)*arg_v, arg_len, "utf8");
-  Local<String> escaped_s = NanNew<String>(result, result_len);
+  Local<String> escaped_s = Nan::New(result, result_len).ToLocalChecked();
   free(result);
 
-  NanReturnValue(escaped_s);
+  info.GetReturnValue().Set(escaped_s);
 }
 
 static NAN_METHOD(Version) {
-  NanScope();
-
-  NanReturnValue(NanNew<String>(mysql_get_client_info()));
+  info.GetReturnValue().Set(Nan::New(mysql_get_client_info()).ToLocalChecked());
 }
 
 extern "C" {
-  void init(Handle<Object> target) {
-    NanScope();
+  static NAN_MODULE_INIT(init) {
+    Nan::HandleScope scope;
 
     Client::Initialize(target);
-    target->Set(NanNew<String>("escape"),
-                NanNew<FunctionTemplate>(Escape)->GetFunction());
-    target->Set(NanNew<String>("version"),
-                NanNew<FunctionTemplate>(Version)->GetFunction());
+    Nan::Set(target, Nan::New("escape").ToLocalChecked(),
+                Nan::GetFunction(Nan::New<FunctionTemplate>(Escape)).ToLocalChecked());
+    Nan::Set(target, Nan::New("version").ToLocalChecked(),
+                Nan::GetFunction(Nan::New<FunctionTemplate>(Version)).ToLocalChecked());
   }
 
-  NODE_MODULE(sqlclient, init);
+  NODE_MODULE(sqlclient, init)
 }
