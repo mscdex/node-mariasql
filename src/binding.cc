@@ -15,126 +15,127 @@ using namespace v8;
 
 
 #if defined(DEBUG) && DEBUG
-# define DBG_LOG(fmt, ...)                                            \
+# define DBG_LOG(fmt, ...)                                                     \
     do { fprintf(stderr, "DEBUG: " fmt , ##__VA_ARGS__); } while (0)
 #else
 # define DBG_LOG(fmt, ...) (void(0))
 #endif
 #define FREE(p) if (p) { free(p); p = NULL; }
-#define IS_BINARY(f) ((f.flags & BINARY_FLAG) &&                      \
-                      ((f.type == MYSQL_TYPE_TINY_BLOB)   ||          \
-                       (f.type == MYSQL_TYPE_MEDIUM_BLOB) ||          \
-                       (f.type == MYSQL_TYPE_BLOB)        ||          \
-                       (f.type == MYSQL_TYPE_LONG_BLOB)   ||          \
-                       (f.type == MYSQL_TYPE_STRING)      ||          \
+#define IS_BINARY(f) ((f.flags & BINARY_FLAG) &&                               \
+                      ((f.type == MYSQL_TYPE_TINY_BLOB)   ||                   \
+                       (f.type == MYSQL_TYPE_MEDIUM_BLOB) ||                   \
+                       (f.type == MYSQL_TYPE_BLOB)        ||                   \
+                       (f.type == MYSQL_TYPE_LONG_BLOB)   ||                   \
+                       (f.type == MYSQL_TYPE_STRING)      ||                   \
                        (f.type == MYSQL_TYPE_VAR_STRING)))
 #define IS_DEAD_ERRNO(v) (v == 2006 || v == 2013 || v == 2055)
-#define DEFAULT_CIPHER "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH"
-#define STATES                        \
-  X(CLOSED, 0)                        \
-  X(CONNECT, 1)                       \
-  X(IDLE, 2)                          \
-  X(QUERY, 3)                         \
-  X(RESULT, 4)                        \
-  X(ROW, 5)                           \
-  X(NEXTRESULT, 6)                    \
-  X(FREERESULT, 7)                    \
-  X(STORERESULT, 8)                   \
+#define DEFAULT_CIPHER "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH"    \
+                       ":!MD5:!aNULL:!EDH"
+#define STATES                                                                 \
+  X(CLOSED, 0)                                                                 \
+  X(CONNECT, 1)                                                                \
+  X(IDLE, 2)                                                                   \
+  X(QUERY, 3)                                                                  \
+  X(RESULT, 4)                                                                 \
+  X(ROW, 5)                                                                    \
+  X(NEXTRESULT, 6)                                                             \
+  X(FREERESULT, 7)                                                             \
+  X(STORERESULT, 8)                                                            \
   X(PING, 9)
-#define EVENT_NAMES                   \
-  X(connect)                          \
-  X(error)                            \
-  X(idle)                             \
-  X(resultinfo)                       \
-  X(row)                              \
-  X(resultend)                        \
-  X(ping)                             \
+#define EVENT_NAMES                                                            \
+  X(connect)                                                                   \
+  X(error)                                                                     \
+  X(idle)                                                                      \
+  X(resultinfo)                                                                \
+  X(row)                                                                       \
+  X(resultend)                                                                 \
+  X(ping)                                                                      \
   X(close)
-#define FIELD_TYPES                   \
-  X(TINY, tiny, TINYINT)              \
-  X(SHORT, short, SMALLINT)           \
-  X(LONG, long, INTEGER)              \
-  X(INT24, int24, MEDIUMINT)          \
-  X(LONGLONG, big, BIGINT)            \
-  X(DECIMAL, dec, DECIMAL)            \
-  X(NEWDECIMAL, newdec, DECIMAL)      \
-  X(FLOAT, float, FLOAT)              \
-  X(DOUBLE, double, DOUBLE)           \
-  X(BIT, bit, BIT)                    \
-  X(TIMESTAMP, ts, TIMESTAMP)         \
-  X(DATE, date, DATE)                 \
-  X(NEWDATE, newdate, DATE)           \
-  X(TIME, time, TIME)                 \
-  X(DATETIME, dtime, DATETIME)        \
-  X(YEAR, year, YEAR)                 \
-  X(STRING, char, CHAR)               \
-  X(VAR_STRING, vstr, VARCHAR)        \
-  X(VARCHAR, vchar, VARCHAR)          \
-  X(TINY_BLOB, tinyblob, TINYBLOB)    \
-  X(MEDIUM_BLOB, medblob, MEDIUMBLOB) \
-  X(LONG_BLOB, lngblob, LONGBLOB)     \
-  X(SET, set, SET)                    \
-  X(ENUM, enum, ENUM)                 \
-  X(GEOMETRY, geo, GEOMETRY)          \
+#define FIELD_TYPES                                                            \
+  X(TINY, tiny, TINYINT)                                                       \
+  X(SHORT, short, SMALLINT)                                                    \
+  X(LONG, long, INTEGER)                                                       \
+  X(INT24, int24, MEDIUMINT)                                                   \
+  X(LONGLONG, big, BIGINT)                                                     \
+  X(DECIMAL, dec, DECIMAL)                                                     \
+  X(NEWDECIMAL, newdec, DECIMAL)                                               \
+  X(FLOAT, float, FLOAT)                                                       \
+  X(DOUBLE, double, DOUBLE)                                                    \
+  X(BIT, bit, BIT)                                                             \
+  X(TIMESTAMP, ts, TIMESTAMP)                                                  \
+  X(DATE, date, DATE)                                                          \
+  X(NEWDATE, newdate, DATE)                                                    \
+  X(TIME, time, TIME)                                                          \
+  X(DATETIME, dtime, DATETIME)                                                 \
+  X(YEAR, year, YEAR)                                                          \
+  X(STRING, char, CHAR)                                                        \
+  X(VAR_STRING, vstr, VARCHAR)                                                 \
+  X(VARCHAR, vchar, VARCHAR)                                                   \
+  X(TINY_BLOB, tinyblob, TINYBLOB)                                             \
+  X(MEDIUM_BLOB, medblob, MEDIUMBLOB)                                          \
+  X(LONG_BLOB, lngblob, LONGBLOB)                                              \
+  X(SET, set, SET)                                                             \
+  X(ENUM, enum, ENUM)                                                          \
+  X(GEOMETRY, geo, GEOMETRY)                                                   \
   X(NULL, null, NULL)
-#define CFG_OPTIONS                   \
-  X(user)                             \
-  X(password)                         \
-  X(host)                             \
-  X(port)                             \
-  X(unixSocket)                       \
-  X(db)                               \
-  X(connTimeout)                      \
-  X(secureAuth)                       \
-  X(multiStatements)                  \
-  X(compress)                         \
-  X(local_infile)                     \
-  X(read_default_file)                \
-  X(read_default_group)               \
-  X(charset)                          \
-  X(tcpKeepalive)                     \
-  X(tcpKeepaliveCnt)                  \
-  X(tcpKeepaliveIntvl)                \
+#define CFG_OPTIONS                                                            \
+  X(user)                                                                      \
+  X(password)                                                                  \
+  X(host)                                                                      \
+  X(port)                                                                      \
+  X(unixSocket)                                                                \
+  X(db)                                                                        \
+  X(connTimeout)                                                               \
+  X(secureAuth)                                                                \
+  X(multiStatements)                                                           \
+  X(compress)                                                                  \
+  X(local_infile)                                                              \
+  X(read_default_file)                                                         \
+  X(read_default_group)                                                        \
+  X(charset)                                                                   \
+  X(tcpKeepalive)                                                              \
+  X(tcpKeepaliveCnt)                                                           \
+  X(tcpKeepaliveIntvl)                                                         \
   X(ssl)
-#define CFG_OPTIONS_SSL               \
-  X(key)                              \
-  X(cert)                             \
-  X(ca)                               \
-  X(capath)                           \
-  X(cipher)                           \
+#define CFG_OPTIONS_SSL                                                        \
+  X(key)                                                                       \
+  X(cert)                                                                      \
+  X(ca)                                                                        \
+  X(capath)                                                                    \
+  X(cipher)                                                                    \
   X(rejectUnauthorized)
 
-static Persistent<FunctionTemplate> constructor;
-//static Persistent<FunctionTemplate> stmt_constructor;
-static Persistent<String> code_symbol;
-static Persistent<String> context_symbol;
-static Persistent<String> conncfg_symbol;
+Nan::Persistent<FunctionTemplate> constructor;
+//Nan::Persistent<FunctionTemplate> stmt_constructor;
+Nan::Persistent<String> code_symbol;
+Nan::Persistent<String> context_symbol;
+Nan::Persistent<String> conncfg_symbol;
 
-#define X(state, val)                 \
+#define X(state, val)                                                          \
 const int STATE_##state = val;
 STATES
 #undef X
 
 const char* state_strings[] = {
-#define X(state, val)  \
+#define X(state, val)                                                          \
 #state,
 STATES
 #undef X
 };
 
-#define X(name)                                \
-static Persistent<String> ev_##name##_symbol;
+#define X(name)                                                                \
+Nan::Persistent<String> ev_##name##_symbol;
 EVENT_NAMES
 #undef X
 
-#define X(suffix, abbr, literal)               \
-static Persistent<String> col_##abbr##_symbol;
+#define X(suffix, abbr, literal)                                               \
+Nan::Persistent<String> col_##abbr##_symbol;
 FIELD_TYPES
 #undef X
-static Persistent<String> col_unsup_symbol;
+Nan::Persistent<String> col_unsup_symbol;
 
-#define X(name)                                \
-static Persistent<String> cfg_##name##_symbol;
+#define X(name)                                                                \
+Nan::Persistent<String> cfg_##name##_symbol;
 CFG_OPTIONS
 CFG_OPTIONS_SSL
 #undef X
@@ -242,9 +243,9 @@ const my_bool MY_BOOL_FALSE = 0;
   }
 #endif
 
-class Client : public ObjectWrap {
+class Client : public Nan::ObjectWrap {
   public:
-    Persistent<Object> context;
+    Nan::Persistent<Object> context;
     uv_poll_t* poll_handle;
     uv_os_sock_t mysql_sock;
     MYSQL mysql;
@@ -266,8 +267,8 @@ class Client : public ObjectWrap {
     bool need_metadata;
     int state;
     int last_status;
-#define X(name)  \
-    NanCallback* on##name;
+#define X(name)                                                                \
+    Nan::Callback* on##name;
     EVENT_NAMES
 #undef X
 
@@ -278,7 +279,7 @@ class Client : public ObjectWrap {
       is_destructing = false;
       initialized = false;
 
-#define X(name)  \
+#define X(name)                                                                \
       on##name = NULL;
       EVENT_NAMES
 #undef X
@@ -286,13 +287,13 @@ class Client : public ObjectWrap {
 
     ~Client() {
       DBG_LOG("~Client()\n");
-#define X(name)       \
-      if (on##name) \
+#define X(name)                                                                \
+      if (on##name)                                                            \
         delete on##name;
       EVENT_NAMES
 #undef X
       if (!context.IsEmpty())
-        NanDisposePersistent(context);
+        context.Reset();
       is_destructing = true;
       close();
     }
@@ -827,7 +828,7 @@ class Client : public ObjectWrap {
       DBG_LOG("cb_close() state=%s\n", state_strings[obj->state]);
 
       FREE(obj->poll_handle);
-      obj->onclose->Call(NanNew<Object>(obj->context), 0, NULL);
+      obj->onclose->Call(Nan::New<Object>(obj->context), 0, NULL);
     }
 
     static void cb_poll(uv_poll_t* handle, int status, int events) {
@@ -847,24 +848,24 @@ class Client : public ObjectWrap {
 
     void on_connect() {
       DBG_LOG("on_connect() state=%s\n", state_strings[state]);
-      onconnect->Call(NanNew<Object>(context), 0, NULL);
+      onconnect->Call(Nan::New<Object>(context), 0, NULL);
     }
 
     void on_error(bool doClose = false, unsigned int errNo = 0,
                   const char* errMsg = NULL) {
       DBG_LOG("on_error() state=%s\n", state_strings[state]);
-      NanScope();
+      Nan::HandleScope scope;
       unsigned int errCode = mysql_errno(&mysql);
 
       if (errNo > 0)
         errCode = errNo;
 
       Local<Object> err =
-          NanError(errMsg ? errMsg : mysql_error(&mysql))->ToObject();
-      err->Set(NanNew<String>(code_symbol), NanNew<Integer>(errCode));
+          Nan::Error(errMsg ? errMsg : mysql_error(&mysql))->ToObject();
+      err->Set(Nan::New<String>(code_symbol), Nan::New<Integer>(errCode));
 
-      Handle<Value> argv[1] = { err };
-      onerror->Call(NanNew<Object>(context), 1, argv);
+      Local<Value> argv[1] = { err };
+      onerror->Call(Nan::New<Object>(context), 1, argv);
 
       if (doClose || IS_DEAD_ERRNO(errCode))
         close();
@@ -873,7 +874,7 @@ class Client : public ObjectWrap {
     void on_row() {
       DBG_LOG("on_row() state=%s,need_columns=%d,need_metadata=%d\n",
               state_strings[state], need_columns, need_metadata);
-      NanScope();
+      Nan::HandleScope scope;
 
       unsigned int n_fields = mysql_num_fields(cur_result);
 
@@ -882,8 +883,8 @@ class Client : public ObjectWrap {
 
       MYSQL_FIELD* fields = mysql_fetch_fields(cur_result);
       unsigned long* lengths = mysql_fetch_lengths(cur_result);
-      Handle<Value> field_value;
-      Local<Array> row = NanNew<Array>(n_fields);
+      Local<Value> field_value;
+      Local<Array> row = Nan::New<Array>(n_fields);
       // binary field vars
       unsigned int vlen;
       unsigned char* buf;
@@ -893,31 +894,33 @@ class Client : public ObjectWrap {
 
       for (unsigned int f = 0; f < n_fields; ++f) {
         if (cur_row[f] == NULL)
-          field_value = NanNull();
+          field_value = Nan::Null();
         else if (IS_BINARY(fields[f])) {
           vlen = lengths[f];
           buf = (unsigned char*)(cur_row[f]);
           new_buf = new uint16_t[vlen];
           for (unsigned long b = 0; b < vlen; ++b)
             new_buf[b] = buf[b];
-          field_value = NanNew<String>(new_buf, vlen);
+          field_value = Nan::New<String>(new_buf, vlen).ToLocalChecked();
           delete[] new_buf;
-        } else
-          field_value = NanNew<String>(cur_row[f], lengths[f]);
+        } else {
+          field_value =
+            Nan::New<String>(cur_row[f], lengths[f]).ToLocalChecked();
+        }
 
         row->Set(f, field_value);
       }
 
-      Handle<Value> argv[1] = {
+      Local<Value> argv[1] = {
         row
       };
-      onrow->Call(NanNew<Object>(context), 1, argv);
+      onrow->Call(Nan::New<Object>(context), 1, argv);
     }
 
     void on_rows() {
       DBG_LOG("on_rows() state=%s,need_columns=%d,need_metadata=%d\n",
               state_strings[state], need_columns, need_metadata);
-      NanScope();
+      Nan::HandleScope scope;
 
       unsigned int n_fields = mysql_num_fields(cur_result);
 
@@ -928,9 +931,9 @@ class Client : public ObjectWrap {
       MYSQL_ROW dbrow;
       int n_rows = mysql_num_rows(cur_result);
       unsigned long* lengths;
-      Handle<Value> field_value;
+      Local<Value> field_value;
       Local<Array> row;
-      Local<Array> rows = NanNew<Array>(n_rows);
+      Local<Array> rows = Nan::New<Array>(n_rows);
       // binary field vars
       unsigned int vlen;
       unsigned char* buf;
@@ -941,29 +944,31 @@ class Client : public ObjectWrap {
       for (int i = 0; i < n_rows; ++i) {
         dbrow = mysql_fetch_row(cur_result);
         lengths = mysql_fetch_lengths(cur_result);
-        row = NanNew<Array>(n_fields);
+        row = Nan::New<Array>(n_fields);
         for (unsigned int f = 0; f < n_fields; ++f) {
           if (dbrow[f] == NULL)
-            field_value = NanNull();
+            field_value = Nan::Null();
           else if (IS_BINARY(fields[f])) {
             vlen = lengths[f];
             buf = (unsigned char*)(dbrow[f]);
             new_buf = new uint16_t[vlen];
             for (unsigned long b = 0; b < vlen; ++b)
               new_buf[b] = buf[b];
-            field_value = NanNew<String>(new_buf, vlen);
+            field_value = Nan::New<String>(new_buf, vlen).ToLocalChecked();
             delete[] new_buf;
-          } else
-            field_value = NanNew<String>(dbrow[f], lengths[f]);
+          } else {
+            field_value =
+              Nan::New<String>(dbrow[f], lengths[f]).ToLocalChecked();
+          }
           row->Set(f, field_value);
         }
         rows->Set(i, row);
       }
 
-      Handle<Value> argv[1] = {
+      Local<Value> argv[1] = {
         rows
       };
-      onrow->Call(NanNew<Object>(context), 1, argv);
+      onrow->Call(Nan::New<Object>(context), 1, argv);
     }
 
     void on_resultinfo(MYSQL_FIELD* fields, unsigned int n_fields) {
@@ -976,13 +981,13 @@ class Client : public ObjectWrap {
         Local<Value> metadata_v;
 
         if (need_metadata)
-          metadata_v = metadata = NanNew<Array>(n_fields * 7);
+          metadata_v = metadata = Nan::New<Array>(n_fields * 7);
         else
-          metadata_v = NanUndefined();
+          metadata_v = Nan::Undefined();
         if (need_columns)
-          columns_v = columns = NanNew<Array>(n_fields);
+          columns_v = columns = Nan::New<Array>(n_fields);
         else
-          columns_v = NanUndefined();
+          columns_v = Nan::Undefined();
 
         for (unsigned int f = 0; f < n_fields; ++f) {
           field = fields[f];
@@ -990,36 +995,41 @@ class Client : public ObjectWrap {
             Local<String> ret;
             // http://dev.mysql.com/doc/refman/5.7/en/c-api-data-structures.html
             switch (field.type) {
-#define X(suffix, abbr, literal)                            \
-              case MYSQL_TYPE_##suffix:                     \
-                ret = NanNew<String>(col_##abbr##_symbol);  \
+#define X(suffix, abbr, literal)                                               \
+              case MYSQL_TYPE_##suffix:                                        \
+                ret = Nan::New<String>(col_##abbr##_symbol);                   \
               break;
               FIELD_TYPES
 #undef X
               default:
-                ret = NanNew<String>(col_unsup_symbol);
+                ret = Nan::New<String>(col_unsup_symbol);
             }
             metadata->Set(m++, ret);
-            metadata->Set(m++, NanNew<Integer>(field.charsetnr));
-            metadata->Set(m++, NanNew<String>(field.db));
-            metadata->Set(m++, NanNew<String>(field.table));
-            metadata->Set(m++, NanNew<String>(field.org_table));
-            metadata->Set(m++, NanNew<String>(field.name));
-            metadata->Set(m++, NanNew<String>(field.org_name));
+            metadata->Set(m++, Nan::New<Integer>(field.charsetnr));
+            metadata->Set(m++, Nan::New<String>(field.db).ToLocalChecked());
+            metadata->Set(m++, Nan::New<String>(field.table).ToLocalChecked());
+            metadata->Set(m++,
+                          Nan::New<String>(field.org_table).ToLocalChecked());
+            metadata->Set(m++, Nan::New<String>(field.name).ToLocalChecked());
+            metadata->Set(m++,
+                          Nan::New<String>(field.org_name).ToLocalChecked());
           }
-          if (need_columns)
-            columns->Set(f, NanNew<String>(field.name, field.name_length));
+          if (need_columns) {
+            columns->Set(f,
+                         Nan::New<String>(field.name,
+                                          field.name_length).ToLocalChecked());
+          }
         }
 
         need_columns = need_metadata = false;
 
-        Handle<Value> resinfo_argv[2] = { columns_v, metadata_v };
-        onresultinfo->Call(NanNew<Object>(context), 2, resinfo_argv);
+        Local<Value> resinfo_argv[2] = { columns_v, metadata_v };
+        onresultinfo->Call(Nan::New<Object>(context), 2, resinfo_argv);
       }
     }
 
     void on_resultend() {
-      NanScope();
+      Nan::HandleScope scope;
 
       my_ulonglong numRows = mysql_num_rows(cur_result);
       my_ulonglong affRows = mysql_affected_rows(&mysql);
@@ -1031,29 +1041,29 @@ class Client : public ObjectWrap {
               (affRows == (my_ulonglong)-1) ? -1 : affRows,
               insId);
 
-      Handle<Value> argv[3] = {
-        NanNew<Number>(numRows),
+      Local<Value> argv[3] = {
+        Nan::New<Number>(numRows),
         (affRows == (my_ulonglong)-1
-         ? NanNew<Number>(-1)
-         : NanNew<Number>(affRows)),
-        NanNew<Number>(insId)
+         ? Nan::New<Number>(-1)
+         : Nan::New<Number>(affRows)),
+        Nan::New<Number>(insId)
       };
-      onresultend->Call(NanNew<Object>(context), 3, argv);
+      onresultend->Call(Nan::New<Object>(context), 3, argv);
     }
 
     void on_ping() {
       DBG_LOG("on_ping() state=%s\n", state_strings[state]);
-      onping->Call(NanNew<Object>(context), 0, NULL);
+      onping->Call(Nan::New<Object>(context), 0, NULL);
     }
 
     void on_idle() {
       DBG_LOG("on_idle() state=%s\n", state_strings[state]);
-      onidle->Call(NanNew<Object>(context), 0, NULL);
+      onidle->Call(Nan::New<Object>(context), 0, NULL);
     }
 
-    void apply_config(Handle<Object> cfg) {
+    void apply_config(Local<Object> cfg) {
       DBG_LOG("apply_config()\n");
-      NanScope();
+      Nan::HandleScope scope;
 
       if (state != STATE_CLOSED)
         return;
@@ -1061,7 +1071,8 @@ class Client : public ObjectWrap {
       init();
 
 #define X(name)                                                                \
-      Local<Value> name##_v = cfg->Get(NanNew<String>(cfg_##name##_symbol));
+      Local<Value> name##_v =                                                  \
+        cfg->Get(Nan::New<String>(cfg_##name##_symbol));
       CFG_OPTIONS
 #undef X
 
@@ -1151,9 +1162,9 @@ class Client : public ObjectWrap {
         bool use_default_ciphers = true;
         if (!ssl_v->IsBoolean()) {
           Local<Object> ssl = ssl_v->ToObject();
-#define X(name)                                                 \
-          Local<Value> name##_v =                               \
-              ssl->Get(NanNew<String>(cfg_##name##_symbol));
+#define X(name)                                                                \
+          Local<Value> name##_v =                                              \
+              ssl->Get(Nan::New<String>(cfg_##name##_symbol));
           CFG_OPTIONS_SSL
 #undef X
 
@@ -1192,252 +1203,249 @@ class Client : public ObjectWrap {
 
     static NAN_METHOD(New) {
       DBG_LOG("new Client()\n");
-      NanScope();
 
-      if (!args.IsConstructCall()) {
-        return NanThrowTypeError(
+      if (!info.IsConstructCall()) {
+        return Nan::ThrowTypeError(
           "Use `new` to create instances of this object."
         );
       }
-      if (args.Length() == 0 || !args[0]->IsObject())
-        return NanThrowTypeError("Missing setup object");
+      if (info.Length() == 0 || !info[0]->IsObject())
+        return Nan::ThrowTypeError("Missing setup object");
 
-      Local<Object> cfg = args[0]->ToObject();
+      Local<Object> cfg = info[0]->ToObject();
 #define X(name)                                                                \
-      Local<Value> v_on##name = cfg->Get(NanNew<String>(ev_##name##_symbol));  \
+      Local<Value> v_on##name =                                                \
+        cfg->Get(Nan::New<String>(ev_##name##_symbol));                        \
       if (!v_on##name->IsFunction())                                           \
-        return NanThrowTypeError("Missing on" #name " handler");
+        return Nan::ThrowTypeError("Missing on" #name " handler");
       EVENT_NAMES
 #undef X
-      Local<Value> context_v = cfg->Get(NanNew<String>(context_symbol));
-      Local<Value> conncfg_v = cfg->Get(NanNew<String>(conncfg_symbol));
+      Local<Value> context_v =
+        cfg->Get(Nan::New<String>(context_symbol));
+      Local<Value> conncfg_v =
+        cfg->Get(Nan::New<String>(conncfg_symbol));
 
       Client* obj = new Client();
 
 #define X(name)                                                                \
-      obj->on##name = new NanCallback(Local<Function>::Cast(v_on##name));
+      obj->on##name = new Nan::Callback(Local<Function>::Cast(v_on##name));
       EVENT_NAMES
 #undef X
       if (context_v->IsObject())
-        NanAssignPersistent(obj->context, context_v->ToObject());
+        obj->context.Reset(context_v->ToObject());
       else
-        NanAssignPersistent(obj->context, NanGetCurrentContext()->Global());
+        obj->context.Reset(Nan::GetCurrentContext()->Global());
       if (conncfg_v->IsObject())
         obj->apply_config(conncfg_v->ToObject());
-      obj->Wrap(args.This());
+      obj->Wrap(info.This());
 
-      NanReturnValue(args.This());
+      info.GetReturnValue().Set(info.This());
     }
 
     static NAN_METHOD(SetConfig) {
       DBG_LOG("client->setConfig()\n");
-      NanScope();
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
-      if (args.Length() > 0 && args[0]->IsObject()) {
-        Local<Object> cfg = args[0]->ToObject();
+      if (info.Length() > 0 && info[0]->IsObject()) {
+        Local<Object> cfg = info[0]->ToObject();
         obj->apply_config(cfg);
       }
 
-      NanReturnUndefined();
+      return;
     }
 
     static NAN_METHOD(Connect) {
       DBG_LOG("client->connect()\n");
-      NanScope();
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state != STATE_CLOSED)
-        return NanThrowError("Already connected");
+        return Nan::ThrowError("Already connected");
 
-      if (args.Length() > 0 && args[0]->IsObject()) {
-        Local<Object> cfg = args[0]->ToObject();
+      if (info.Length() > 0 && info[0]->IsObject()) {
+        Local<Object> cfg = info[0]->ToObject();
         obj->apply_config(cfg);
       } else
         obj->init();
 
       obj->connect();
 
-      NanReturnUndefined();
+      return;
     }
 
     static NAN_METHOD(Close) {
       DBG_LOG("client->close()\n");
-      NanScope();
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (!obj->close())
-        return NanThrowError("Not connected");
+        return Nan::ThrowError("Not connected");
 
-      NanReturnUndefined();
+      return;
     }
 
     static NAN_METHOD(Pause) {
       DBG_LOG("client->pause()\n");
-      NanScope();
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       obj->pause();
 
-      NanReturnUndefined();
+      return;
     }
 
     static NAN_METHOD(Resume) {
       DBG_LOG("client->resume()\n");
-      NanScope();
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       obj->resume();
 
-      NanReturnUndefined();
+      return;
     }
 
     static NAN_METHOD(Ping) {
       DBG_LOG("client->ping()\n");
-      NanScope();
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       obj->ping();
 
-      NanReturnUndefined();
+      return;
     }
 
     static NAN_METHOD(Query) {
       DBG_LOG("client->query()\n");
-      NanScope();
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state != STATE_IDLE)
-        return NanThrowError("Not ready to query");
-      if (args.Length() < 3)
-        return NanThrowTypeError("Missing arguments");
-      if (!args[0]->IsString())
-        return NanThrowTypeError("query argument must be a string");
-      /*if (!args[0]->IsString() && !stmt_constructor->HasInstance(args[0])) {
-        return NanThrowTypeError(
+        return Nan::ThrowError("Not ready to query");
+      if (info.Length() < 3)
+        return Nan::ThrowTypeError("Missing arguments");
+      if (!info[0]->IsString())
+        return Nan::ThrowTypeError("query argument must be a string");
+      /*if (!info[0]->IsString() && !stmt_constructor->HasInstance(info[0])) {
+        return Nan::ThrowTypeError(
             "query argument must be a string or Statement instance"
         );
       }*/
-      if (!args[1]->IsBoolean())
-        return NanThrowTypeError("columns argument must be a boolean");
-      if (!args[2]->IsBoolean())
-        return NanThrowTypeError("metadata argument must be a boolean");
-      if (!args[3]->IsBoolean())
-        return NanThrowTypeError("buffered argument must be a boolean");
+      if (!info[1]->IsBoolean())
+        return Nan::ThrowTypeError("columns argument must be a boolean");
+      if (!info[2]->IsBoolean())
+        return Nan::ThrowTypeError("metadata argument must be a boolean");
+      if (!info[3]->IsBoolean())
+        return Nan::ThrowTypeError("buffered argument must be a boolean");
 
-      //if (args[0]->IsString()) {
-        String::Utf8Value query(args[0]);
-        obj->query(*(String::Utf8Value(args[0])),
-                   args[1]->BooleanValue(),
-                   args[2]->BooleanValue(),
-                   args[3]->BooleanValue());
+      //if (info[0]->IsString()) {
+        String::Utf8Value query(info[0]);
+        obj->query(*(String::Utf8Value(info[0])),
+                   info[1]->BooleanValue(),
+                   info[2]->BooleanValue(),
+                   info[3]->BooleanValue());
       /*} else {
-        Local<Object> stmt_obj = args[0]->ToObject();
-        Statement* stmt = ObjectWrap::Unwrap<Statement>(stmt_obj);
-        obj->query(stmt, args[1]->BooleanValue(), args[2]->BooleanValue());
+        Local<Object> stmt_obj = info[0]->ToObject();
+        Statement* stmt = Nan::ObjectWrap::Unwrap<Statement>(stmt_obj);
+        obj->query(stmt, info[1]->BooleanValue(), info[2]->BooleanValue());
       }*/
 
-      NanReturnUndefined();
+      return;
     }
 
     static NAN_METHOD(Escape) {
       DBG_LOG("client->escape()\n");
-      NanScope();
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state == STATE_CLOSED)
-        return NanThrowError("Not connected");
-      else if (args.Length() == 0 || !args[0]->IsString())
-        return NanThrowTypeError("You must supply a string");
+        return Nan::ThrowError("Not connected");
+      else if (info.Length() == 0 || !info[0]->IsString())
+        return Nan::ThrowTypeError("You must supply a string");
 
-      String::Utf8Value arg_v(args[0]);
+      String::Utf8Value arg_v(info[0]);
       unsigned long arg_len = arg_v.length();
       char* result = (char*) malloc(arg_len * 2 + 1);
       unsigned long result_len = obj->escape((char*)*arg_v, arg_len, result);
-      Local<String> escaped_s = NanNew<String>(result, result_len);
+      Local<String> escaped_s =
+        Nan::New<String>(result, result_len).ToLocalChecked();
       free(result);
-      NanReturnValue(escaped_s);
+      info.GetReturnValue().Set(escaped_s);
     }
 
     static NAN_METHOD(IsMariaDB) {
       DBG_LOG("client->isMariaDB()\n");
-      NanScope();
-      Client* obj = ObjectWrap::Unwrap<Client>(args.This());
+      Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state == STATE_CLOSED)
-        return NanThrowError("Not connected");
+        return Nan::ThrowError("Not connected");
 
-      NanReturnValue(NanNew<Boolean>(mariadb_connection(&obj->mysql) == 1));
+      info.GetReturnValue().Set(
+        Nan::New<Boolean>(mariadb_connection(&obj->mysql) == 1)
+      );
     }
 
     static void Initialize(Handle<Object> target) {
-      NanScope();
+      Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
 
-      Local<FunctionTemplate> tpl = NanNew<FunctionTemplate>(New);
-
-      NanAssignPersistent(constructor, tpl);
+      constructor.Reset(tpl);
       tpl->InstanceTemplate()->SetInternalFieldCount(1);
-      tpl->SetClassName(NanNew<String>("Client"));
+      tpl->SetClassName(Nan::New<String>("Client").ToLocalChecked());
 
-      NanAssignPersistent(code_symbol, NanNew<String>("code"));
-      NanAssignPersistent(context_symbol, NanNew<String>("context"));
-      NanAssignPersistent(conncfg_symbol, NanNew<String>("config"));
+      code_symbol.Reset(Nan::New<String>("code").ToLocalChecked());
+      context_symbol.Reset(Nan::New<String>("context").ToLocalChecked());
+      conncfg_symbol.Reset(Nan::New<String>("config").ToLocalChecked());
 
 #define X(name)                                                                \
-      NanAssignPersistent(ev_##name##_symbol, NanNew<String>("on" #name));
+      ev_##name##_symbol.Reset(Nan::New<String>("on" #name).ToLocalChecked());
       EVENT_NAMES
 #undef X
 
 #define X(suffix, abbr, literal)                                               \
-      NanAssignPersistent(col_##abbr##_symbol, NanNew<String>(#literal));
+      col_##abbr##_symbol.Reset(Nan::New<String>(#literal).ToLocalChecked());
       FIELD_TYPES
 #undef X
-      NanAssignPersistent(col_unsup_symbol,
-                          NanNew<String>("[Unknown field type]"));
+      col_unsup_symbol.Reset(
+        Nan::New<String>("[Unknown field type]").ToLocalChecked()
+      );
 
 #define X(name)                                                                \
-      NanAssignPersistent(cfg_##name##_symbol, NanNew<String>(#name));
+      cfg_##name##_symbol.Reset(Nan::New<String>(#name).ToLocalChecked());
       CFG_OPTIONS
       CFG_OPTIONS_SSL
 #undef X
 
-      NODE_SET_PROTOTYPE_METHOD(tpl, "connect", Connect);
-      NODE_SET_PROTOTYPE_METHOD(tpl, "query", Query);
-      NODE_SET_PROTOTYPE_METHOD(tpl, "setConfig", SetConfig);
-      NODE_SET_PROTOTYPE_METHOD(tpl, "pause", Pause);
-      NODE_SET_PROTOTYPE_METHOD(tpl, "resume", Resume);
-      NODE_SET_PROTOTYPE_METHOD(tpl, "ping", Ping);
-      NODE_SET_PROTOTYPE_METHOD(tpl, "escape", Escape);
-      NODE_SET_PROTOTYPE_METHOD(tpl, "close", Close);
-      NODE_SET_PROTOTYPE_METHOD(tpl, "isMariaDB", IsMariaDB);
+      Nan::SetPrototypeMethod(tpl, "connect", Connect);
+      Nan::SetPrototypeMethod(tpl, "query", Query);
+      Nan::SetPrototypeMethod(tpl, "setConfig", SetConfig);
+      Nan::SetPrototypeMethod(tpl, "pause", Pause);
+      Nan::SetPrototypeMethod(tpl, "resume", Resume);
+      Nan::SetPrototypeMethod(tpl, "ping", Ping);
+      Nan::SetPrototypeMethod(tpl, "escape", Escape);
+      Nan::SetPrototypeMethod(tpl, "close", Close);
+      Nan::SetPrototypeMethod(tpl, "isMariaDB", IsMariaDB);
 
-      target->Set(NanNew<String>("Client"), tpl->GetFunction());
+      target->Set(Nan::New<String>("Client").ToLocalChecked(),
+                  tpl->GetFunction());
     }
 };
 
 static NAN_METHOD(Escape) {
   DBG_LOG("Client::escape()\n");
-  NanScope();
 
-  if (args.Length() == 0 || !args[0]->IsString())
-    return NanThrowTypeError("You must supply a string");
+  if (info.Length() == 0 || !info[0]->IsString())
+    return Nan::ThrowTypeError("You must supply a string");
 
-  String::Utf8Value arg_v(args[0]);
+  String::Utf8Value arg_v(info[0]);
   unsigned long arg_len = arg_v.length();
   char* result = (char*) malloc(arg_len * 2 + 1);
   unsigned long result_len =
       mysql_escape_string_ex(result, (char*)*arg_v, arg_len, "utf8");
-  Local<String> escaped_s = NanNew<String>(result, result_len);
+  Local<String> escaped_s =
+    Nan::New<String>(result, result_len).ToLocalChecked();
   free(result);
 
-  NanReturnValue(escaped_s);
+  info.GetReturnValue().Set(escaped_s);
 }
 
 static NAN_METHOD(Version) {
   DBG_LOG("version()\n");
-  NanScope();
 
-  NanReturnValue(NanNew<String>(mysql_get_client_info()));
+  info.GetReturnValue().Set(
+    Nan::New<String>(mysql_get_client_info()).ToLocalChecked()
+  );
 }
 
 // =============================================================================
@@ -1445,7 +1453,7 @@ static NAN_METHOD(Version) {
 //       The C API for prepared statements is absolutely ridiculous and you
 //       couldn't pay me enough money to write a binding for that part of the
 //       API.
-/*class Statement : public ObjectWrap {
+/*class Statement : public Nan::ObjectWrap {
   public:
     MYSQL_STMT* stmt;
     MYSQL_BIND* params;
@@ -1478,40 +1486,38 @@ static NAN_METHOD(Version) {
 
     static NAN_METHOD(New) {
       DBG_LOG("new Statement()\n");
-      NanScope();
 
-      if (!args.IsConstructCall()) {
-        return NanThrowTypeError(
+      if (!info.IsConstructCall()) {
+        return Nan::ThrowTypeError(
           "Use `new` to create instances of this object."
         );
       }
 
-      if (args.Length() == 0 || !args[0]->IsString())
-        return NanThrowTypeError("Missing query string");
+      if (info.Length() == 0 || !info[0]->IsString())
+        return Nan::ThrowTypeError("Missing query string");
 
       Statement *obj = new Statement();
-      obj->query = strdup(*(String::Utf8Value(args[0])));
-      obj->Wrap(args.This());
+      obj->query = strdup(*(String::Utf8Value(info[0])));
+      obj->Wrap(info.This());
 
-      NanReturnValue(args.This());
+      info.GetReturnValue().Set(info.This());
     }
 
     static NAN_METHOD(Bind) {
       DBG_LOG("statement->bind()\n");
-      NanScope();
 
-      if (args.Length() == 0 || !args[0]->IsArray())
-        return NanThrowTypeError("Missing array of parameters to bind");
+      if (info.Length() == 0 || !info[0]->IsArray())
+        return Nan::ThrowTypeError("Missing array of parameters to bind");
 
-      Statement *obj = ObjectWrap::Unwrap<Statement>(args.This());
-      Local<Array> arr = Local<Array>::Cast(args[0]);
+      Statement *obj = Nan::ObjectWrap::Unwrap<Statement>(info.This());
+      Local<Array> arr = Local<Array>::Cast(info[0]);
       uint32_t len = arr->Length();
 
       // validate param count early if our statement is already prepared
       if (obj->stmt
           && obj->is_prepared
           && len != mysql_stmt_param_count(obj->stmt))
-        return NanThrowError("Wrong parameter count");
+        return Nan::ThrowError("Wrong parameter count");
 
       obj->clear_params();
 
@@ -1529,35 +1535,32 @@ static NAN_METHOD(Version) {
         }
       }
 
-      NanReturnUndefined();
+      return;
     }
     
     static void Initialize(Handle<Object> target) {
-      NanScope();
+      Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
 
-      Local<FunctionTemplate> tpl = NanNew<FunctionTemplate>(New);
-
-      NanAssignPersistent(stmt_constructor, tpl);
+      stmt_constructor.Reset(tpl);
       tpl->InstanceTemplate()->SetInternalFieldCount(1);
-      tpl->SetClassName(NanNew<String>("Statement"));
+      tpl->SetClassName(Nan::New<String>("Statement").ToLocalChecked());
 
-      NODE_SET_PROTOTYPE_METHOD(tpl, "bind", Bind);
+      Nan::SetPrototypeMethod(tpl, "bind", Bind);
 
-      target->Set(NanNew<String>("Statement"), tpl->GetFunction());
+      target->Set(Nan::New<String>("Statement").ToLocalChecked(),
+                  tpl->GetFunction());
     }
 };*/
 // =============================================================================
 
 extern "C" {
   void init(Handle<Object> target) {
-    NanScope();
-
     Client::Initialize(target);
     //Statement::Initialize(target);
-    target->Set(NanNew<String>("escape"),
-                NanNew<FunctionTemplate>(Escape)->GetFunction());
-    target->Set(NanNew<String>("version"),
-                NanNew<FunctionTemplate>(Version)->GetFunction());
+    target->Set(Nan::New<String>("escape").ToLocalChecked(),
+                Nan::New<FunctionTemplate>(Escape)->GetFunction());
+    target->Set(Nan::New<String>("version").ToLocalChecked(),
+                Nan::New<FunctionTemplate>(Version)->GetFunction());
   }
 
   NODE_MODULE(sqlclient, init);
