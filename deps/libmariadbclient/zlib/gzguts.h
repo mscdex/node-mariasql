@@ -100,7 +100,7 @@
    termination of the result -- however this is only used in gzlib.c where
    the result is assured to fit in the space provided */
 // XXX: HAVE_SNPRINTF check added by mscdex
-#if defined _MSC_VER && !defined HAVE_SNPRINTF
+#if defined(_MSC_VER) && !defined(HAVE_SNPRINTF)
 #  define snprintf _snprintf
 #endif
 
