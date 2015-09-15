@@ -1444,6 +1444,7 @@ class Client : public Nan::ObjectWrap {
       code_symbol.Reset(Nan::New<String>("code").ToLocalChecked());
       context_symbol.Reset(Nan::New<String>("context").ToLocalChecked());
       conncfg_symbol.Reset(Nan::New<String>("config").ToLocalChecked());
+      neg_one_symbol.Reset(Nan::New<String>("-1").ToLocalChecked());
 
 #define X(name)                                                                \
       ev_##name##_symbol.Reset(Nan::New<String>("on" #name).ToLocalChecked());
