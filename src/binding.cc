@@ -1021,15 +1021,16 @@ class Client : public Nan::ObjectWrap {
               default:
                 ret = Nan::New<String>(col_unsup_symbol);
             }
+            metadata->Set(m++, Nan::New<String>(field.name).ToLocalChecked());
+            metadata->Set(m++,
+                          Nan::New<String>(field.org_name).ToLocalChecked());
             metadata->Set(m++, ret);
+            metadata->Set(m++, Nan::New<Integer>(field.flags));
             metadata->Set(m++, Nan::New<Integer>(field.charsetnr));
             metadata->Set(m++, Nan::New<String>(field.db).ToLocalChecked());
             metadata->Set(m++, Nan::New<String>(field.table).ToLocalChecked());
             metadata->Set(m++,
                           Nan::New<String>(field.org_table).ToLocalChecked());
-            metadata->Set(m++, Nan::New<String>(field.name).ToLocalChecked());
-            metadata->Set(m++,
-                          Nan::New<String>(field.org_name).ToLocalChecked());
           }
           if (need_columns) {
             columns->Set(f,
