@@ -882,7 +882,7 @@ class Client : public Nan::ObjectWrap {
       DBG_LOG("on_row() state=%s,need_columns=%d,need_metadata=%d\n",
               state_strings[state], need_columns, need_metadata);
 
-      unsigned int n_fields = mysql_num_fields(cur_result);
+      unsigned int n_fields = (cur_result ? mysql_num_fields(cur_result) : 0);
 
       if (n_fields == 0)
         return;
@@ -929,7 +929,7 @@ class Client : public Nan::ObjectWrap {
       DBG_LOG("on_rows() state=%s,need_columns=%d,need_metadata=%d\n",
               state_strings[state], need_columns, need_metadata);
 
-      unsigned int n_fields = mysql_num_fields(cur_result);
+      unsigned int n_fields = (cur_result ? mysql_num_fields(cur_result) : 0);
 
       if (n_fields == 0)
         return;
