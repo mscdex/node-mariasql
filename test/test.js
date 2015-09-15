@@ -11,22 +11,23 @@ function NOOP(err) { assert.strictEqual(err, null); }
 var tests = [
   { what: 'Non-empty threadId',
     run: function() {
-      var client = makeClient();
       var threadId;
+      var client = makeClient(function() {
+        assert.strictEqual(typeof threadId, 'string');
+        assert.notStrictEqual(threadId.length, 0);
+      });
       client.connect(function() {
         threadId = client.threadId;
         client.end();
-      });
-      client.on('close', function() {
-        assert.strictEqual(typeof threadId, 'string');
-        assert.notStrictEqual(threadId.length, 0);
       });
     }
   },
   { what: 'Buffered result (defaults)',
     run: function() {
-      var client = makeClient();
       var finished = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+      });
       client.query("SELECT 'hello' col1, 'world' col2", function(err, rows) {
         assert.strictEqual(err, null);
         assert.deepStrictEqual(
@@ -45,15 +46,14 @@ var tests = [
         finished = true;
         client.end();
       });
-      client.on('close', function() {
-        assert.strictEqual(finished, true);
-      });
     }
   },
-  { what: 'Buffered result (metadata enabled)',
+  { what: 'Buffered result (metadata)',
     run: function() {
-      var client = makeClient();
       var finished = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+      });
       makeFooTable(client, {
         id: { type: 'INT', options: ['AUTO_INCREMENT', 'PRIMARY KEY'] },
         name: 'VARCHAR(255)'
@@ -116,14 +116,11 @@ var tests = [
         finished = true;
         client.end();
       });
-      client.on('close', function() {
-        assert.strictEqual(finished, true);
-      });
     }
   },
 ];
 
-function makeClient() {
+function makeClient(closeCb) {
   var client = new Client({
     host: process.env.DB_HOST || '127.0.0.1',
     port: +(process.env.DB_PORT || 3306),
@@ -131,8 +128,8 @@ function makeClient() {
     password: process.env.DB_PASS || ''
   });
   process.nextTick(function() {
-    // Allow tests to set up `close` event handlers that gets executed first, to
-    // make assertions, etc. before continuing onto next test
+    if (typeof closeCb === 'function')
+      client.on('close', closeCb);
     client.on('close', next);
   });
   return client;
