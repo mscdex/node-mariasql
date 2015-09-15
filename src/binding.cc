@@ -1319,8 +1319,6 @@ class Client : public Nan::ObjectWrap {
         Local<Object> cfg = info[0]->ToObject();
         obj->apply_config(cfg);
       }
-
-      return;
     }
 
     static NAN_METHOD(Connect) {
@@ -1337,8 +1335,6 @@ class Client : public Nan::ObjectWrap {
         obj->init();
 
       obj->connect();
-
-      return;
     }
 
     static NAN_METHOD(Close) {
@@ -1346,9 +1342,7 @@ class Client : public Nan::ObjectWrap {
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (!obj->close())
-        return Nan::ThrowError("Not connected");
-
-      return;
+        Nan::ThrowError("Not connected");
     }
 
     static NAN_METHOD(Pause) {
@@ -1356,8 +1350,6 @@ class Client : public Nan::ObjectWrap {
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       obj->pause();
-
-      return;
     }
 
     static NAN_METHOD(Resume) {
@@ -1365,8 +1357,6 @@ class Client : public Nan::ObjectWrap {
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       obj->resume();
-
-      return;
     }
 
     static NAN_METHOD(Ping) {
@@ -1411,8 +1401,6 @@ class Client : public Nan::ObjectWrap {
         Statement* stmt = Nan::ObjectWrap::Unwrap<Statement>(stmt_obj);
         obj->query(stmt, info[1]->BooleanValue(), info[2]->BooleanValue());
       }*/
-
-      return;
     }
 
     static NAN_METHOD(Escape) {
