@@ -471,6 +471,12 @@ class Client : public Nan::ObjectWrap {
       return false;
     }
 
+    uint64_t lastInsertId() {
+      DBG_LOG("lastInsertId() state=%s\n", state_strings[state]);
+      
+      return static_cast<uint64_t>(mysql_insert_id(&mysql));
+    }
+
     unsigned long escape(const char* src, unsigned long src_len, char* dest) {
       return mysql_real_escape_string(&mysql, dest, src, src_len);
     }
@@ -1364,8 +1370,22 @@ class Client : public Nan::ObjectWrap {
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       obj->ping();
+    }
 
-      return;
+    static NAN_METHOD(LastInsertId) {
+      DBG_LOG("client->lastInsertId()\n");
+      Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
+
+      uint64_t insertId = obj->lastInsertId();
+
+      int r = snprintf(u64_buf, sizeof(u64_buf), "%" PRIu64, insertId);
+      if (r <= 0 || r >= sizeof(u64_buf))
+        info.GetReturnValue().Set(Nan::EmptyString());
+      else {
+        info.GetReturnValue().Set(
+          Nan::New<String>(u64_buf, r).ToLocalChecked()
+        );
+      }
     }
 
     static NAN_METHOD(Query) {
