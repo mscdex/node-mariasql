@@ -7,6 +7,7 @@
       ],
       'include_dirs': [
         'deps/libmariadbclient/include',
+        'deps/libmariadbclient/libmysql',
         "<!(node -e \"require('nan')\")"
       ],
       'cflags': [ '-O3' ],

@@ -6,6 +6,16 @@
 #include <string.h>
 #include <string>
 
+// For Pre-VS2015
+#include "snprintf.c"
+
+#if defined(_MSC_VER) && _MSC_VER < 1800
+# define PRIi64 "I64i"
+# define PRIu64 "I64u"
+#else
+# include <inttypes.h>
+#endif
+
 #include <mysql.h>
 
 using namespace node;
@@ -110,6 +120,8 @@ Nan::Persistent<FunctionTemplate> constructor;
 Nan::Persistent<String> code_symbol;
 Nan::Persistent<String> context_symbol;
 Nan::Persistent<String> conncfg_symbol;
+Nan::Persistent<String> neg_one_symbol;
+char u64_buf[21];
 
 #define X(state, val)                                                          \
 const int STATE_##state = val;
@@ -1049,23 +1061,51 @@ class Client : public Nan::ObjectWrap {
     void on_resultend() {
       Nan::HandleScope scope;
 
-      my_ulonglong numRows = mysql_num_rows(cur_result);
-      my_ulonglong affRows = mysql_affected_rows(&mysql);
-      my_ulonglong insId = mysql_insert_id(&mysql);
+      uint64_t numRows = (cur_result ? mysql_num_rows(cur_result) : 0);
+      uint64_t affRows = mysql_affected_rows(&mysql);
+      uint64_t insertId = mysql_insert_id(&mysql);
 
-      DBG_LOG("on_resultend() state=%s,numRows=%llu,affRows=%lld,insId=%llu\n",
-              state_strings[state],
-              numRows,
-              (affRows == (my_ulonglong)-1) ? -1 : affRows,
-              insId);
+      if (affRows == (my_ulonglong)-1) {
+        DBG_LOG("on_resultend() state=%s,"
+                "numRows=%"PRIu64",affRows=%"PRIi64",insertId=%"PRIu64"\n",
+                state_strings[state],
+                numRows,
+                -1,
+                insertId);
+      } else {
+        DBG_LOG("on_resultend() state=%s,"
+                "numRows=%"PRIu64",affRows=%"PRIu64",insertId=%"PRIu64"\n",
+                state_strings[state],
+                numRows,
+                affRows,
+                insertId);
+      }
 
-      Local<Value> argv[3] = {
-        Nan::New<Number>(numRows),
-        (affRows == (my_ulonglong)-1
-         ? Nan::New<Number>(-1)
-         : Nan::New<Number>(affRows)),
-        Nan::New<Number>(insId)
-      };
+      Local<Value> argv[3];
+      int r;
+
+      r = snprintf(u64_buf, sizeof(u64_buf), "%" PRIu64, numRows);
+      if (r <= 0 || r >= sizeof(u64_buf))
+        argv[0] = Nan::EmptyString();
+      else
+        argv[0] = Nan::New<String>(u64_buf, r).ToLocalChecked();
+
+      if (affRows == (my_ulonglong)-1)
+        argv[1] = Nan::New<String>(neg_one_symbol);
+      else {
+        r = snprintf(u64_buf, sizeof(u64_buf), "%" PRIu64, affRows);
+        if (r <= 0 || r >= sizeof(u64_buf))
+          argv[1] = Nan::EmptyString();
+        else
+          argv[1] = Nan::New<String>(u64_buf, r).ToLocalChecked();
+      }
+
+      r = snprintf(u64_buf, sizeof(u64_buf), "%" PRIu64, insertId);
+      if (r <= 0 || r >= sizeof(u64_buf))
+        argv[2] = Nan::EmptyString();
+      else
+        argv[2] = Nan::New<String>(u64_buf, r).ToLocalChecked();
+
       onresultend->Call(Nan::New<Object>(context), 3, argv);
     }
 
