@@ -542,7 +542,9 @@ class Client : public Nan::ObjectWrap {
               status = mysql_real_query_start(&err,
                                               &mysql,
                                               cur_query,
-                                              strlen(cur_query));
+                                              static_cast<unsigned long>(
+                                                strlen(cur_query)
+                                              ));
               cur_query = NULL;
               if (status) {
                 done = true;
@@ -936,15 +938,21 @@ class Client : public Nan::ObjectWrap {
 
       MYSQL_FIELD* fields = mysql_fetch_fields(cur_result);
       MYSQL_ROW dbrow;
-      int n_rows = mysql_num_rows(cur_result);
+      uint64_t n_rows = mysql_num_rows(cur_result);
       unsigned long* lengths;
       Local<Value> field_value;
       Local<Array> row;
-      Local<Array> rows = Nan::New<Array>(n_rows);
+      Local<Array> rows;
+
       // binary field vars
       unsigned int vlen;
       unsigned char* buf;
       uint16_t* new_buf;
+
+      if (n_rows <= INT32_MAX)
+        rows = Nan::New<Array>(static_cast<int>(n_rows));
+      else
+        rows = Nan::New<Array>();
 
       on_resultinfo(fields, n_fields);
 
