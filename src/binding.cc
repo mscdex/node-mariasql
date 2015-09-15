@@ -1136,21 +1136,21 @@ class Client : public Nan::ObjectWrap {
       if (!user_v->IsString() || user_v->ToString()->Length() == 0)
         config.user = NULL;
       else {
-        String::Utf8Value user_s(user_v);
+        Nan::Utf8String user_s(user_v);
         config.user = strdup(*user_s);
       }
 
       if (!password_v->IsString() || password_v->ToString()->Length() == 0)
         config.password = NULL;
       else {
-        String::Utf8Value password_s(password_v);
+        Nan::Utf8String password_s(password_v);
         config.password = strdup(*password_s);
       }
 
       if (!host_v->IsString() || host_v->ToString()->Length() == 0)
         config.host = NULL;
       else {
-        String::Utf8Value host_s(host_v);
+        Nan::Utf8String host_s(host_v);
         config.host = strdup(*host_s);
       }
 
@@ -1162,12 +1162,12 @@ class Client : public Nan::ObjectWrap {
       if (!unixSocket_v->IsString() || unixSocket_v->ToString()->Length() == 0)
         config.unixSocket = NULL;
       else {
-        String::Utf8Value unixSocket_s(unixSocket_v);
+        Nan::Utf8String unixSocket_s(unixSocket_v);
         config.unixSocket = strdup(*unixSocket_s);
       }
 
       if (db_v->IsString() && db_v->ToString()->Length() > 0) {
-        String::Utf8Value db_s(db_v);
+        Nan::Utf8String db_s(db_v);
         config.db = strdup(*db_s);
       }
 
@@ -1193,14 +1193,16 @@ class Client : public Nan::ObjectWrap {
 
       if (read_default_file_v->IsString()
           && read_default_file_v->ToString()->Length() > 0) {
+        Nan::Utf8String def_file_s(read_default_file_v);
         mysql_options(&mysql, MYSQL_READ_DEFAULT_FILE,
-                      *String::Utf8Value(read_default_file_v));
+                      *def_file_s);
       }
 
       if (read_default_group_v->IsString()
           && read_default_group_v->ToString()->Length() > 0) {
+        Nan::Utf8String def_grp_s(read_default_group_v);
         mysql_options(&mysql, MYSQL_READ_DEFAULT_GROUP,
-                      *String::Utf8Value(read_default_group_v));
+                      *def_grp_s);
       }
 
       if (tcpKeepalive_v->IsUint32())
@@ -1211,7 +1213,8 @@ class Client : public Nan::ObjectWrap {
         config.tcpkaIntvl = tcpKeepaliveIntvl_v->Uint32Value();
 
       if (charset_v->IsString() && charset_v->ToString()->Length() > 0) {
-        config.charset = strdup(*(String::Utf8Value(charset_v)));
+        Nan::Utf8String charset_s(charset_v);
+        config.charset = strdup(*charset_s);
         mysql_options(&mysql, MYSQL_SET_CHARSET_NAME, config.charset); 
       }
 
@@ -1225,16 +1228,25 @@ class Client : public Nan::ObjectWrap {
           CFG_OPTIONS_SSL
 #undef X
 
-          if (key_v->IsString() && key_v->ToString()->Length() > 0)
-            config.ssl_key = strdup(*(String::Utf8Value(key_v)));
-          if (cert_v->IsString() && cert_v->ToString()->Length() > 0)
-            config.ssl_cert = strdup(*(String::Utf8Value(cert_v)));
-          if (ca_v->IsString() && ca_v->ToString()->Length() > 0)
-            config.ssl_ca = strdup(*(String::Utf8Value(ca_v)));
-          if (capath_v->IsString() && capath_v->ToString()->Length() > 0)
-            config.ssl_capath = strdup(*(String::Utf8Value(capath_v)));
+          if (key_v->IsString() && key_v->ToString()->Length() > 0) {
+            Nan::Utf8String key_s(key_v);
+            config.ssl_key = strdup(*key_s);
+          }
+          if (cert_v->IsString() && cert_v->ToString()->Length() > 0) {
+            Nan::Utf8String cert_s(cert_v);
+            config.ssl_cert = strdup(*cert_s);
+          }
+          if (ca_v->IsString() && ca_v->ToString()->Length() > 0) {
+            Nan::Utf8String ca_s(ca_v);
+            config.ssl_ca = strdup(*ca_s);
+          }
+          if (capath_v->IsString() && capath_v->ToString()->Length() > 0) {
+            Nan::Utf8String capath_s(capath_v);
+            config.ssl_capath = strdup(*capath_s);
+          }
           if (cipher_v->IsString() && cipher_v->ToString()->Length() > 0) {
-            config.ssl_cipher = strdup(*(String::Utf8Value(cipher_v)));
+            Nan::Utf8String cipher_s(cipher_v);
+            config.ssl_cipher = strdup(*cipher_s);
             use_default_ciphers = false;
           }
 
@@ -1389,8 +1401,8 @@ class Client : public Nan::ObjectWrap {
         return Nan::ThrowTypeError("buffered argument must be a boolean");
 
       //if (info[0]->IsString()) {
-        String::Utf8Value query(info[0]);
-        obj->query(*(String::Utf8Value(info[0])),
+        Nan::Utf8String query_s(info[0]);
+        obj->query(*query_s,
                    info[1]->BooleanValue(),
                    info[2]->BooleanValue(),
                    info[3]->BooleanValue());
@@ -1412,7 +1424,7 @@ class Client : public Nan::ObjectWrap {
       else if (info.Length() == 0 || !info[0]->IsString())
         return Nan::ThrowTypeError("You must supply a string");
 
-      String::Utf8Value arg_v(info[0]);
+      Nan::Utf8String arg_v(info[0]);
       unsigned long arg_len = arg_v.length();
       char* result = (char*) malloc(arg_len * 2 + 1);
       unsigned long result_len = obj->escape((char*)*arg_v, arg_len, result);
@@ -1485,7 +1497,7 @@ static NAN_METHOD(Escape) {
   if (info.Length() == 0 || !info[0]->IsString())
     return Nan::ThrowTypeError("You must supply a string");
 
-  String::Utf8Value arg_v(info[0]);
+  Nan::Utf8String arg_v(info[0]);
   unsigned long arg_len = arg_v.length();
   char* result = (char*) malloc(arg_len * 2 + 1);
   unsigned long result_len =
