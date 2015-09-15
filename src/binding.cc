@@ -824,6 +824,8 @@ class Client : public Nan::ObjectWrap {
     }
 
     static void cb_close(uv_handle_t* handle) {
+      Nan::HandleScope scope;
+
       Client* obj = (Client*)handle->data;
       DBG_LOG("cb_close() state=%s\n", state_strings[obj->state]);
 
@@ -847,14 +849,17 @@ class Client : public Nan::ObjectWrap {
     }
 
     void on_connect() {
+      Nan::HandleScope scope;
       DBG_LOG("on_connect() state=%s\n", state_strings[state]);
       onconnect->Call(Nan::New<Object>(context), 0, NULL);
     }
 
     void on_error(bool doClose = false, unsigned int errNo = 0,
                   const char* errMsg = NULL) {
-      DBG_LOG("on_error() state=%s\n", state_strings[state]);
       Nan::HandleScope scope;
+
+      DBG_LOG("on_error() state=%s\n", state_strings[state]);
+
       unsigned int errCode = mysql_errno(&mysql);
 
       if (errNo > 0)
@@ -874,12 +879,13 @@ class Client : public Nan::ObjectWrap {
     void on_row() {
       DBG_LOG("on_row() state=%s,need_columns=%d,need_metadata=%d\n",
               state_strings[state], need_columns, need_metadata);
-      Nan::HandleScope scope;
 
       unsigned int n_fields = mysql_num_fields(cur_result);
 
       if (n_fields == 0)
         return;
+
+      Nan::HandleScope scope;
 
       MYSQL_FIELD* fields = mysql_fetch_fields(cur_result);
       unsigned long* lengths = mysql_fetch_lengths(cur_result);
@@ -920,12 +926,13 @@ class Client : public Nan::ObjectWrap {
     void on_rows() {
       DBG_LOG("on_rows() state=%s,need_columns=%d,need_metadata=%d\n",
               state_strings[state], need_columns, need_metadata);
-      Nan::HandleScope scope;
 
       unsigned int n_fields = mysql_num_fields(cur_result);
 
       if (n_fields == 0)
         return;
+
+      Nan::HandleScope scope;
 
       MYSQL_FIELD* fields = mysql_fetch_fields(cur_result);
       MYSQL_ROW dbrow;
@@ -973,6 +980,8 @@ class Client : public Nan::ObjectWrap {
 
     void on_resultinfo(MYSQL_FIELD* fields, unsigned int n_fields) {
       if (need_metadata || need_columns) {
+        Nan::HandleScope scope;
+
         MYSQL_FIELD field;
         unsigned int m = 0;
         Local<Array> columns;
@@ -1063,7 +1072,6 @@ class Client : public Nan::ObjectWrap {
 
     void apply_config(Local<Object> cfg) {
       DBG_LOG("apply_config()\n");
-      Nan::HandleScope scope;
 
       if (state != STATE_CLOSED)
         return;
