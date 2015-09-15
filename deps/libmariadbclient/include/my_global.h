@@ -74,6 +74,7 @@
 
 /* Simplify configuration file references -bw */
 #include <config.h>
+#include "snprintf.h"
 
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
 #define HAVE_PSI_INTERFACE
