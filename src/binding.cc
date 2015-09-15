@@ -1277,7 +1277,7 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(New) {
-      DBG_LOG("new Client()\n");
+      DBG_LOG("new ClientBinding()\n");
 
       if (!info.IsConstructCall()) {
         return Nan::ThrowTypeError(
@@ -1318,7 +1318,7 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(SetConfig) {
-      DBG_LOG("client->setConfig()\n");
+      DBG_LOG("clientBinding->setConfig()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (info.Length() > 0 && info[0]->IsObject()) {
@@ -1328,7 +1328,7 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(Connect) {
-      DBG_LOG("client->connect()\n");
+      DBG_LOG("clientBinding->connect()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state != STATE_CLOSED)
@@ -1344,7 +1344,7 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(Close) {
-      DBG_LOG("client->close()\n");
+      DBG_LOG("clientBinding->close()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (!obj->close())
@@ -1352,28 +1352,28 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(Pause) {
-      DBG_LOG("client->pause()\n");
+      DBG_LOG("clientBinding->pause()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       obj->pause();
     }
 
     static NAN_METHOD(Resume) {
-      DBG_LOG("client->resume()\n");
+      DBG_LOG("clientBinding->resume()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       obj->resume();
     }
 
     static NAN_METHOD(Ping) {
-      DBG_LOG("client->ping()\n");
+      DBG_LOG("clientBinding->ping()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       obj->ping();
     }
 
     static NAN_METHOD(LastInsertId) {
-      DBG_LOG("client->lastInsertId()\n");
+      DBG_LOG("clientBinding->lastInsertId()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       uint64_t insertId = obj->lastInsertId();
@@ -1389,7 +1389,7 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(Query) {
-      DBG_LOG("client->query()\n");
+      DBG_LOG("clientBinding->query()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state != STATE_IDLE)
@@ -1424,7 +1424,7 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(Escape) {
-      DBG_LOG("client->escape()\n");
+      DBG_LOG("clientBinding->escape()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state == STATE_CLOSED)
@@ -1443,7 +1443,7 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(IsMariaDB) {
-      DBG_LOG("client->isMariaDB()\n");
+      DBG_LOG("clientBinding->isMariaDB()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state == STATE_CLOSED)
@@ -1456,10 +1456,11 @@ class Client : public Nan::ObjectWrap {
 
     static void Initialize(Handle<Object> target) {
       Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
+      Local<String> name = Nan::New<String>("ClientBinding").ToLocalChecked();
 
       constructor.Reset(tpl);
       tpl->InstanceTemplate()->SetInternalFieldCount(1);
-      tpl->SetClassName(Nan::New<String>("Client").ToLocalChecked());
+      tpl->SetClassName(name);
 
       code_symbol.Reset(Nan::New<String>("code").ToLocalChecked());
       context_symbol.Reset(Nan::New<String>("context").ToLocalChecked());
@@ -1495,13 +1496,12 @@ class Client : public Nan::ObjectWrap {
       Nan::SetPrototypeMethod(tpl, "close", Close);
       Nan::SetPrototypeMethod(tpl, "isMariaDB", IsMariaDB);
 
-      target->Set(Nan::New<String>("Client").ToLocalChecked(),
-                  tpl->GetFunction());
+      target->Set(name, tpl->GetFunction());
     }
 };
 
 static NAN_METHOD(Escape) {
-  DBG_LOG("Client::escape()\n");
+  DBG_LOG("ClientBinding::escape()\n");
 
   if (info.Length() == 0 || !info[0]->IsString())
     return Nan::ThrowTypeError("You must supply a string");
@@ -1519,7 +1519,7 @@ static NAN_METHOD(Escape) {
 }
 
 static NAN_METHOD(Version) {
-  DBG_LOG("version()\n");
+  DBG_LOG("ClientBinding::version()\n");
 
   info.GetReturnValue().Set(
     Nan::New<String>(mysql_get_client_info()).ToLocalChecked()
