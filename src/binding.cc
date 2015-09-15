@@ -1495,6 +1495,7 @@ class Client : public Nan::ObjectWrap {
       Nan::SetPrototypeMethod(tpl, "escape", Escape);
       Nan::SetPrototypeMethod(tpl, "close", Close);
       Nan::SetPrototypeMethod(tpl, "isMariaDB", IsMariaDB);
+      Nan::SetPrototypeMethod(tpl, "lastInsertId", LastInsertId);
 
       target->Set(name, tpl->GetFunction());
     }
