@@ -86,10 +86,15 @@ typedef volatile LONG my_pthread_once_t;
 #define MY_PTHREAD_ONCE_INPROGRESS 1
 #define MY_PTHREAD_ONCE_DONE 2
 
+// VS2015 has timespec -bw
+#if defined(_MSC_VER) && _MSC_VER >= 1900
+# include <time.h>
+#else
 struct timespec {
   time_t tv_sec;
   long tv_nsec;
 };
+#endif
 
 int win_pthread_mutex_trylock(pthread_mutex_t *mutex);
 int pthread_create(pthread_t *, const pthread_attr_t *, pthread_handler, void *);
