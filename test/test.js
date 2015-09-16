@@ -9,15 +9,43 @@ var t = -1;
 function NOOP(err) { assert.strictEqual(err, null); }
 
 var tests = [
+  { what: 'Client::version()',
+    run: function() {
+      var version = Client.version();
+      assert.strictEqual(typeof version, 'string');
+      assert.notStrictEqual(version.length, 0);
+      next();
+    }
+  },
+  { what: 'Client::escape()',
+    run: function() {
+      assert.strictEqual(Client.escape("hello 'world'"), "hello \\'world\\'");
+      next();
+    }
+  },
   { what: 'Non-empty threadId',
     run: function() {
-      var threadId;
+      var finished = false;
       var client = makeClient(function() {
-        assert.strictEqual(typeof threadId, 'string');
-        assert.notStrictEqual(threadId.length, 0);
+        assert.strictEqual(finished, true);
       });
       client.connect(function() {
-        threadId = client.threadId;
+        assert.strictEqual(typeof client.threadId, 'string');
+        assert.notStrictEqual(client.threadId.length, 0);
+        finished = true;
+        client.end();
+      });
+    }
+  },
+  { what: 'Empty threadId (explicit disable)',
+    run: function() {
+      var threadId;
+      var client = makeClient({ threadId: false }, function() {
+        assert.strictEqual(finished, true);
+      });
+      client.connect(function() {
+        assert.strictEqual(client.threadId, undefined);
+        finished = true;
         client.end();
       });
     }
@@ -34,6 +62,35 @@ var tests = [
           rows,
           appendProps(
             [ {col1: 'hello', col2: 'world'} ],
+            { info: {
+                numRows: '1',
+                affectedRows: '1',
+                insertId: '0',
+                metadata: undefined
+              }
+            }
+          )
+        );
+        finished = true;
+        client.end();
+      });
+    }
+  },
+  { what: 'Buffered result (useArray)',
+    run: function() {
+      var finished = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+      });
+      client.query("SELECT 'hello' col1, 'world' col2",
+                   null,
+                   { useArray: true },
+                   function(err, rows) {
+        assert.strictEqual(err, null);
+        assert.deepStrictEqual(
+          rows,
+          appendProps(
+            [ ['hello', 'world'] ],
             { info: {
                 numRows: '1',
                 affectedRows: '1',
@@ -118,20 +175,57 @@ var tests = [
       });
     }
   },
+  { what: 'lastInsertId()',
+    run: function() {
+      var finished = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+      });
+      makeFooTable(client, {
+        id: { type: 'INT', options: ['AUTO_INCREMENT', 'PRIMARY KEY'] },
+        name: 'VARCHAR(255)'
+      });
+      client.query("INSERT INTO foo (id, name) VALUES (NULL, 'hello')",
+                   function(err) {
+        assert.strictEqual(err, null);
+        assert.strictEqual(client.lastInsertId(), '1');
+        client.query("INSERT INTO foo (id, name) VALUES (NULL, 'world')",
+                     function(err) {
+          assert.strictEqual(err, null);
+          assert.strictEqual(client.lastInsertId(), '2');
+          finished = true;
+          client.end();
+        });
+      });
+    }
+  },
 ];
 
-function makeClient(closeCb) {
-  var client = new Client({
+function makeClient(opts, closeCb) {
+  var config = {
     host: process.env.DB_HOST || '127.0.0.1',
     port: +(process.env.DB_PORT || 3306),
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASS || ''
-  });
+  };
+
+  if (typeof opts === 'object' && opts !== null) {
+    Object.keys(opts).forEach(function(key) {
+      config[key] = opts[key];
+    });
+  } else if (typeof opts === 'function') {
+    closeCb = opts;
+    opts = null;
+  }
+
+  var client = new Client(config);
+
   process.nextTick(function() {
     if (typeof closeCb === 'function')
       client.on('close', closeCb);
     client.on('close', next);
   });
+
   return client;
 }
 
