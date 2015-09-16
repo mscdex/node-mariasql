@@ -974,7 +974,7 @@ class Client : public Nan::ObjectWrap {
 
       on_resultinfo(fields, n_fields);
 
-      for (int i = 0; i < n_rows; ++i) {
+      for (uint64_t i = 0; i < n_rows; ++i) {
         dbrow = mysql_fetch_row(cur_result);
         lengths = mysql_fetch_lengths(cur_result);
         row = Nan::New<Array>(n_fields);
