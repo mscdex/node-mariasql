@@ -33,11 +33,14 @@
         'src/tftables.cpp',
         'src/twofish.cpp',
       ],
+      # Prevents node's openssl headers from getting in the way
+      'include_dirs!': [ '<(node_root_dir)/include/node' ],
       'include_dirs': [
         '.',
         'include',
         'mySTL',
       ],
+      'include_dirs+': [ '<(node_root_dir)/include/node' ],
     },
   ],
 }
