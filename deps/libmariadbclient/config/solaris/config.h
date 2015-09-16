@@ -593,17 +593,20 @@
 
 /* #undef SO_EXT */
 
-#define MYSQL_MAJOR_VERSION 5
-#define MYSQL_MINOR_VERSION 5
+#define MYSQL_VERSION_MAJOR 10
+#define MYSQL_VERSION_MINOR 0
+#define MYSQL_VERSION_PATCH 21
+#define MYSQL_VERSION_EXTRA ""
 
 #define PACKAGE "mysql"
 #define PACKAGE_BUGREPORT ""
 #define PACKAGE_NAME "MySQL Server"
-#define PACKAGE_STRING "MySQL Server 5.5.30"
+#define PACKAGE_STRING "MySQL Server 10.0.21"
 #define PACKAGE_TARNAME "mysql"
-#define PACKAGE_VERSION "5.5.30"
-#define VERSION "5.5.30"
+#define PACKAGE_VERSION "10.0.21"
+#define VERSION "10.0.21"
 #define PROTOCOL_VERSION 10
+
 
 
 /* time_t related defines */
