@@ -19,6 +19,8 @@
         'src/yassl_imp.cpp',
         'src/yassl_int.cpp',
       ],
+      # Prevents node's openssl headers from getting in the way
+      'include_dirs!': [ '<(node_root_dir)/include/node' ],
       'include_dirs': [
         '.',
         'include',
@@ -26,6 +28,7 @@
         'taocrypt/mySTL',
         '../../include',
       ],
+      'include_dirs+': [ '<(node_root_dir)/include/node' ],
     },
   ],
 }

@@ -3,7 +3,7 @@
     'HAVE_YASSL',
     #'HAVE_OPENSSL',
     #'YASSL_PURE_C',
-    'YASSL_PREFIX',
+    #'YASSL_PREFIX',
     'YASSL_THREAD_SAFE',
     'DBUG_OFF',
   ],

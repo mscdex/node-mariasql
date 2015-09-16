@@ -18,12 +18,15 @@
         'my_sha1.cc',
         'my_sha2.cc',
       ],
+      # Prevents node's openssl headers from getting in the way
+      'include_dirs!': [ '<(node_root_dir)/include/node' ],
       'include_dirs': [
         '.',
         '../include',
         '../extra/yassl/include',
         '../extra/yassl/taocrypt/include',
       ],
+      'include_dirs+': [ '<(node_root_dir)/include/node' ],
     },
   ],
 }
