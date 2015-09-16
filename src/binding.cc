@@ -1073,10 +1073,9 @@ class Client : public Nan::ObjectWrap {
 
       if (affRows == (my_ulonglong)-1) {
         DBG_LOG("on_resultend() state=%s,"
-                "numRows=%"PRIu64",affRows=%"PRIi64",insertId=%"PRIu64"\n",
+                "numRows=%"PRIu64",affRows=-1,insertId=%"PRIu64"\n",
                 state_strings[state],
                 numRows,
-                -1,
                 insertId);
       } else {
         DBG_LOG("on_resultend() state=%s,"
