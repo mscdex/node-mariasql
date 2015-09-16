@@ -39,7 +39,7 @@ var tests = [
   },
   { what: 'Empty threadId (explicit disable)',
     run: function() {
-      var threadId;
+      var finished = false;
       var client = makeClient({ threadId: false }, function() {
         assert.strictEqual(finished, true);
       });
