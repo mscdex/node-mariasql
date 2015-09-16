@@ -5,6 +5,7 @@ var format = require('util').format;
 var inspect = require('util').inspect;
 
 var t = -1;
+var timeout;
 
 function NOOP(err) { assert.strictEqual(err, null); }
 
@@ -530,10 +531,16 @@ function makeFooTable(client, colDefs, tableOpts) {
 }
 
 function next() {
+  clearTimeout(timeout);
+  if (t > -1)
+    console.log('Finished %j', tests[t].what)
   if (t === tests.length - 1)
     return;
   var v = tests[++t];
-  console.log("Executing '%s' ...", v.what);
+  timeout = setTimeout(function() {
+    throw new Error(format('Test case %j timed out', v.what));
+  }, 10 * 1000);
+  console.log('Executing %j', v.what);
   v.run.call(v);
 }
 
