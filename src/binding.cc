@@ -1,3 +1,15 @@
+#if defined(_MSC_VER) && _MSC_VER < 1800
+# define PRIi64 "I64i"
+# define PRIu64 "I64u"
+#else
+# define __STDC_LIMIT_MACROS
+# include <inttypes.h>
+# include <stdint.h>
+#endif
+#ifndef _MSC_VER
+# include <limits>
+#endif
+
 #include <node.h>
 #include <node_buffer.h>
 #include <nan.h>
@@ -8,14 +20,6 @@
 
 // For Pre-VS2015
 #include "snprintf.c"
-
-#if defined(_MSC_VER) && _MSC_VER < 1800
-# define PRIi64 "I64i"
-# define PRIu64 "I64u"
-#else
-# include <inttypes.h>
-# include <stdint.h>
-#endif
 
 #include <mysql.h>
 
