@@ -1455,7 +1455,7 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(ServerVersion) {
-      DBG_LOG("ClientBinding::serverVersion()\n");
+      DBG_LOG("clientBinding->serverVersion()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
 
       if (obj->state == STATE_CLOSED)
