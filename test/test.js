@@ -274,19 +274,14 @@ var tests = [
         assert.deepStrictEqual(
           events,
           [ 'result',
-            [ 'result.data',
-              appendProps(
-                [ {col1: 'hello', col2: 'world'} ],
-                { info: {
-                    numRows: '1',
-                    affectedRows: '1',
-                    insertId: '0',
-                    metadata: undefined
-                  }
-                }
-              )
+            [ 'result.data', {col1: 'hello', col2: 'world'} ],
+            [ 'result.end',
+              { numRows: '1',
+                affectedRows: '-1',
+                insertId: '0',
+                metadata: undefined
+              }
             ],
-            'result.end',
             'query.end'
           ]
         );
@@ -300,7 +295,7 @@ var tests = [
         res.on('data', function(row) {
           events.push(['result.data', row]);
         }).on('end', function() {
-          events.push('result.end');
+          events.push(['result.end', res.info]);
         });
       }).on('end', function() {
         events.push('query.end');
@@ -317,19 +312,14 @@ var tests = [
         assert.deepStrictEqual(
           events,
           [ 'result',
-            [ 'result.data',
-              appendProps(
-                [ ['hello', 'world'] ],
-                { info: {
-                    numRows: '1',
-                    affectedRows: '1',
-                    insertId: '0',
-                    metadata: undefined
-                  }
-                }
-              )
+            [ 'result.data', ['hello', 'world'] ],
+            [ 'result.end',
+              { numRows: '1',
+                affectedRows: '-1',
+                insertId: '0',
+                metadata: undefined
+              }
             ],
-            'result.end',
             'query.end'
           ]
         );
@@ -345,7 +335,7 @@ var tests = [
         res.on('data', function(row) {
           events.push(['result.data', row]);
         }).on('end', function() {
-          events.push('result.end');
+          events.push(['result.end', res.info]);
         });
       }).on('end', function() {
         events.push('query.end');
@@ -362,42 +352,38 @@ var tests = [
         assert.deepStrictEqual(
           events,
           [ 'result',
-            [ 'result.data',
-              appendProps(
-                [ {id: '1', name: 'hello world'}, {id: '2', name: 'bar'} ],
-                { info: {
-                    numRows: '2',
-                    affectedRows: '2',
-                    insertId: '1',
-                    metadata: {
-                      id: {
-                        org_name: 'id',
-                        type: 'INTEGER',
-                        flags: Client.NOT_NULL_FLAG
-                               | Client.PRI_KEY_FLAG
-                               | Client.AUTO_INCREMENT_FLAG
-                               | Client.PART_KEY_FLAG
-                               | Client.NUM_FLAG,
-                        charsetnr: 63,
-                        db: 'foo',
-                        table: 'foo',
-                        org_table: 'foo'
-                      },
-                      name: {
-                        org_name: 'name',
-                        type: 'VARCHAR',
-                        flags: 0,
-                        charsetnr: 8,
-                        db: 'foo',
-                        table: 'foo',
-                        org_table: 'foo'
-                      }
-                    }
+            [ 'result.data', {id: '1', name: 'hello world'} ],
+            [ 'result.data', {id: '2', name: 'bar'} ],
+            [ 'result.end',
+              { numRows: '2',
+                affectedRows: '-1',
+                insertId: '1',
+                metadata: {
+                  id: {
+                    org_name: 'id',
+                    type: 'INTEGER',
+                    flags: Client.NOT_NULL_FLAG
+                           | Client.PRI_KEY_FLAG
+                           | Client.AUTO_INCREMENT_FLAG
+                           | Client.PART_KEY_FLAG
+                           | Client.NUM_FLAG,
+                    charsetnr: 63,
+                    db: 'foo',
+                    table: 'foo',
+                    org_table: 'foo'
+                  },
+                  name: {
+                    org_name: 'name',
+                    type: 'VARCHAR',
+                    flags: 0,
+                    charsetnr: 8,
+                    db: 'foo',
+                    table: 'foo',
+                    org_table: 'foo'
                   }
                 }
-              )
+              }
             ],
-            'result.end',
             'query.end'
           ]
         );
@@ -411,14 +397,15 @@ var tests = [
       });
       client.query("INSERT INTO foo VALUES (NULL, 'hello world'),(NULL, 'bar')",
                    NOOP);
-      var query = client.query("SELECT 'hello' col1, 'world' col2",
+      var query = client.query('SELECT id, name FROM foo',
+                               null,
                                { metadata: true });
       query.on('result', function(res) {
         events.push('result');
         res.on('data', function(row) {
           events.push(['result.data', row]);
         }).on('end', function() {
-          events.push('result.end');
+          events.push(['result.end', res.info]);
         });
       }).on('end', function() {
         events.push('query.end');
