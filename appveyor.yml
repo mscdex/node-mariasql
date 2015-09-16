@@ -1,8 +1,11 @@
 # http://www.appveyor.com/docs/appveyor-yml
 
-# Test against these versions of Io.js and Node.js.
+services:
+  - mysql
+
 environment:
   DB_PASS: Password12!
+  # Test against these versions of Io.js and Node.js.
   matrix:
     - nodejs_version: "0.10"
     - nodejs_version: "0.12"
