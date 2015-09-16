@@ -3,6 +3,7 @@
 # define PRIu64 "I64u"
 #else
 # define __STDC_LIMIT_MACROS
+# define __STDC_FORMAT_MACROS
 # include <inttypes.h>
 # include <stdint.h>
 #endif
@@ -1094,7 +1095,7 @@ class Client : public Nan::ObjectWrap {
       Local<Value> argv[3];
       int r;
 
-      r = snprintf(u64_buf, sizeof(u64_buf), "%" PRIu64, numRows);
+      r = snprintf(u64_buf, sizeof(u64_buf), "%"PRIu64, numRows);
       if (r <= 0 || r >= sizeof(u64_buf))
         argv[0] = Nan::EmptyString();
       else
@@ -1103,14 +1104,14 @@ class Client : public Nan::ObjectWrap {
       if (affRows == (my_ulonglong)-1)
         argv[1] = Nan::New<String>(neg_one_symbol);
       else {
-        r = snprintf(u64_buf, sizeof(u64_buf), "%" PRIu64, affRows);
+        r = snprintf(u64_buf, sizeof(u64_buf), "%"PRIu64, affRows);
         if (r <= 0 || r >= sizeof(u64_buf))
           argv[1] = Nan::EmptyString();
         else
           argv[1] = Nan::New<String>(u64_buf, r).ToLocalChecked();
       }
 
-      r = snprintf(u64_buf, sizeof(u64_buf), "%" PRIu64, insertId);
+      r = snprintf(u64_buf, sizeof(u64_buf), "%"PRIu64, insertId);
       if (r <= 0 || r >= sizeof(u64_buf))
         argv[2] = Nan::EmptyString();
       else
