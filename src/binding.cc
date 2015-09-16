@@ -1122,11 +1122,15 @@ class Client : public Nan::ObjectWrap {
     }
 
     void on_ping() {
+      Nan::HandleScope scope;
+
       DBG_LOG("on_ping() state=%s\n", state_strings[state]);
       onping->Call(Nan::New<Object>(context), 0, NULL);
     }
 
     void on_idle() {
+      Nan::HandleScope scope;
+
       DBG_LOG("on_idle() state=%s\n", state_strings[state]);
       onidle->Call(Nan::New<Object>(context), 0, NULL);
     }
