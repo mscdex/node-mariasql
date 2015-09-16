@@ -1454,6 +1454,18 @@ class Client : public Nan::ObjectWrap {
       );
     }
 
+    static NAN_METHOD(ServerVersion) {
+      DBG_LOG("ClientBinding::serverVersion()\n");
+      Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
+
+      if (obj->state == STATE_CLOSED)
+        return Nan::ThrowError("Not connected");
+
+      info.GetReturnValue().Set(
+        Nan::New<String>(mysql_get_server_info(&obj->mysql)).ToLocalChecked()
+      );
+    }
+
     static void Initialize(Handle<Object> target) {
       Local<FunctionTemplate> tpl = Nan::New<FunctionTemplate>(New);
       Local<String> name = Nan::New<String>("ClientBinding").ToLocalChecked();
@@ -1495,6 +1507,7 @@ class Client : public Nan::ObjectWrap {
       Nan::SetPrototypeMethod(tpl, "escape", Escape);
       Nan::SetPrototypeMethod(tpl, "close", Close);
       Nan::SetPrototypeMethod(tpl, "isMariaDB", IsMariaDB);
+      Nan::SetPrototypeMethod(tpl, "serverVersion", ServerVersion);
       Nan::SetPrototypeMethod(tpl, "lastInsertId", LastInsertId);
 
       target->Set(name, tpl->GetFunction());
