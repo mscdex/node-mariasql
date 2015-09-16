@@ -14,6 +14,7 @@
 # define PRIu64 "I64u"
 #else
 # include <inttypes.h>
+# include <stdint.h>
 #endif
 
 #include <mysql.h>
