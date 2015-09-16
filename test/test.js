@@ -23,6 +23,55 @@ var tests = [
       next();
     }
   },
+  { what: 'prepare()',
+    run: function() {
+      var client = new Client();
+      var fn;
+      fn = client.prepare("SELECT * FROM foo WHERE id = '123'");
+      assert.strictEqual(fn({ id: 456 }),
+                         "SELECT * FROM foo WHERE id = '123'");
+      fn = client.prepare("SELECT * FROM foo WHERE id = :id");
+      assert.strictEqual(fn({ id: 123 }),
+                         "SELECT * FROM foo WHERE id = '123'");
+      assert.strictEqual(fn({ id: 456 }),
+                         "SELECT * FROM foo WHERE id = '456'");
+      fn = client.prepare("SELECT * FROM foo WHERE id = ?");
+      assert.strictEqual(fn([123]),
+                         "SELECT * FROM foo WHERE id = '123'");
+      assert.strictEqual(fn([456]),
+                         "SELECT * FROM foo WHERE id = '456'");
+      fn = client.prepare("SELECT * FROM foo WHERE id = :0 AND name = :1");
+      assert.strictEqual(fn(['123', 'baz']),
+                         "SELECT * FROM foo WHERE id = '123' AND name = 'baz'");
+
+      // Edge cases
+      fn = client.prepare("SELECT * FROM foo WHERE id = :id"
+                          + " AND first = ? AND last = ? AND middle = '?'");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: '123' })),
+                         "SELECT * FROM foo WHERE id = '123'"
+                         + " AND first = 'foo' AND last = 'bar'"
+                         + " AND middle = '?'");
+      fn = client.prepare("SELECT * FROM foo WHERE id = :id"
+                          + " AND first = ? AND last = '?' AND middle = ?");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: '123' })),
+                         "SELECT * FROM foo WHERE id = '123'"
+                         + " AND first = 'foo' AND last = '?'"
+                         + " AND middle = 'bar'");
+      fn = client.prepare("SELECT * FROM foo WHERE id = :id"
+                          + " AND first = '?' AND last = '?' AND middle = ?");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: '123' })),
+                         "SELECT * FROM foo WHERE id = '123'"
+                         + " AND first = '?' AND last = '?'"
+                         + " AND middle = 'foo'");
+      fn = client.prepare("SELECT * FROM foo WHERE id = :id"
+                          + " AND first = ? AND last = '?' AND middle = '?'");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: '123' })),
+                         "SELECT * FROM foo WHERE id = '123'"
+                         + " AND first = 'foo' AND last = '?'"
+                         + " AND middle = '?'");
+      next();
+    }
+  },
   { what: 'Non-empty threadId',
     run: function() {
       var finished = false;
@@ -45,6 +94,47 @@ var tests = [
       });
       client.connect(function() {
         assert.strictEqual(client.threadId, undefined);
+        finished = true;
+        client.end();
+      });
+    }
+  },
+  { what: 'escape()',
+    run: function() {
+      var finished = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+      });
+      client.connect(function() {
+        assert.strictEqual(client.escape("hello 'world'"), "hello \\'world\\'");
+        finished = true;
+        client.end();
+      });
+    }
+  },
+  { what: 'isMariaDB()',
+    run: function() {
+      var finished = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+      });
+      client.connect(function() {
+        assert.strictEqual(typeof client.isMariaDB(), 'boolean');
+        finished = true;
+        client.end();
+      });
+    }
+  },
+  { what: 'serverVersion()',
+    run: function() {
+      var finished = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+      });
+      client.connect(function() {
+        var version = client.serverVersion();
+        assert.strictEqual(typeof version, 'string');
+        assert.notStrictEqual(version.length, 0);
         finished = true;
         client.end();
       });
@@ -170,6 +260,167 @@ var tests = [
             }
           )
         );
+        finished = true;
+        client.end();
+      });
+    }
+  },
+  { what: 'Streamed result (defaults)',
+    run: function() {
+      var finished = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+        assert.deepStrictEqual(
+          events,
+          [ 'result',
+            [ 'result.data',
+              appendProps(
+                [ {col1: 'hello', col2: 'world'} ],
+                { info: {
+                    numRows: '1',
+                    affectedRows: '1',
+                    insertId: '0',
+                    metadata: undefined
+                  }
+                }
+              )
+            ],
+            'result.end',
+            'query.end'
+          ]
+        );
+        finished = true;
+        client.end();
+      });
+      var events = [];
+      var query = client.query("SELECT 'hello' col1, 'world' col2");
+      query.on('result', function(res) {
+        events.push('result');
+        res.on('data', function(row) {
+          events.push(['result.data', row]);
+        }).on('end', function() {
+          events.push('result.end');
+        });
+      }).on('end', function() {
+        events.push('query.end');
+        finished = true;
+        client.end();
+      });
+    }
+  },
+  { what: 'Streamed result (useArray)',
+    run: function() {
+      var finished = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+        assert.deepStrictEqual(
+          events,
+          [ 'result',
+            [ 'result.data',
+              appendProps(
+                [ ['hello', 'world'] ],
+                { info: {
+                    numRows: '1',
+                    affectedRows: '1',
+                    insertId: '0',
+                    metadata: undefined
+                  }
+                }
+              )
+            ],
+            'result.end',
+            'query.end'
+          ]
+        );
+        finished = true;
+        client.end();
+      });
+      var events = [];
+      var query = client.query("SELECT 'hello' col1, 'world' col2",
+                               null,
+                               { useArray: true });
+      query.on('result', function(res) {
+        events.push('result');
+        res.on('data', function(row) {
+          events.push(['result.data', row]);
+        }).on('end', function() {
+          events.push('result.end');
+        });
+      }).on('end', function() {
+        events.push('query.end');
+        finished = true;
+        client.end();
+      });
+    }
+  },
+  { what: 'Streamed result (metadata)',
+    run: function() {
+      var finished = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+        assert.deepStrictEqual(
+          events,
+          [ 'result',
+            [ 'result.data',
+              appendProps(
+                [ {id: '1', name: 'hello world'}, {id: '2', name: 'bar'} ],
+                { info: {
+                    numRows: '2',
+                    affectedRows: '2',
+                    insertId: '1',
+                    metadata: {
+                      id: {
+                        org_name: 'id',
+                        type: 'INTEGER',
+                        flags: Client.NOT_NULL_FLAG
+                               | Client.PRI_KEY_FLAG
+                               | Client.AUTO_INCREMENT_FLAG
+                               | Client.PART_KEY_FLAG
+                               | Client.NUM_FLAG,
+                        charsetnr: 63,
+                        db: 'foo',
+                        table: 'foo',
+                        org_table: 'foo'
+                      },
+                      name: {
+                        org_name: 'name',
+                        type: 'VARCHAR',
+                        flags: 0,
+                        charsetnr: 8,
+                        db: 'foo',
+                        table: 'foo',
+                        org_table: 'foo'
+                      }
+                    }
+                  }
+                }
+              )
+            ],
+            'result.end',
+            'query.end'
+          ]
+        );
+        finished = true;
+        client.end();
+      });
+      var events = [];
+      makeFooTable(client, {
+        id: { type: 'INT', options: ['AUTO_INCREMENT', 'PRIMARY KEY'] },
+        name: 'VARCHAR(255)'
+      });
+      client.query("INSERT INTO foo VALUES (NULL, 'hello world'),(NULL, 'bar')",
+                   NOOP);
+      var query = client.query("SELECT 'hello' col1, 'world' col2",
+                               { metadata: true });
+      query.on('result', function(res) {
+        events.push('result');
+        res.on('data', function(row) {
+          events.push(['result.data', row]);
+        }).on('end', function() {
+          events.push('result.end');
+        });
+      }).on('end', function() {
+        events.push('query.end');
         finished = true;
         client.end();
       });
