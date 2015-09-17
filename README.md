@@ -98,7 +98,7 @@ var c = new Client({
   db: 'mydb'
 });
 
-var query = c.query('SELECT * FROM users WHERE id = '1');
+var query = c.query("SELECT * FROM users WHERE id > 1");
 query.on('result', function(res) {
   // `res` is a streams2+ Readable object stream
   res.on('data', function(row) {
