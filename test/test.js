@@ -488,7 +488,7 @@ var tests = [
         assert.strictEqual(finished, true);
         assert.strictEqual(sawAbortCb, true);
       });
-      var query = client.query("SELECT SLEEP(60) ret", function(err, rows) {
+      client.query("SELECT SLEEP(60) ret", function(err, rows) {
         assert.strictEqual(err, null);
         assert.deepStrictEqual(
           rows,
@@ -511,7 +511,162 @@ var tests = [
           assert.strictEqual(err, null);
           sawAbortCb = true;
         });
-      }, 3000);
+      }, 1000);
+    }
+  },
+  { what: 'Abort connection',
+    run: function() {
+      var finished = false;
+      var aborting = false;
+      var sawError = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+        assert.strictEqual(aborting, true);
+        assert.strictEqual(sawError, true);
+      });
+      client.on('error', function(err) {
+        assert.strictEqual(sawError, false);
+        assert.strictEqual(typeof err, 'object');
+        assert.strictEqual(err.code, 2013);
+        sawError = true;
+      });
+      client.query("SELECT SLEEP(60) ret", function(err, rows) {
+        assert.strictEqual(typeof err, 'object');
+        assert.strictEqual(err.code, 2013);
+        assert.strictEqual(rows, undefined);
+        finished = true;
+      });
+      setTimeout(function() {
+        aborting = true;
+        client.abort(true, function(err) {
+          assert.strictEqual(err, null);
+        });
+      }, 1000);
+    }
+  },
+  { what: 'clean up pending queries on close',
+    run: function() {
+      var finished1 = false;
+      var finished2 = false;
+      var finished3 = false;
+      var aborting = false;
+      var sawError = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished1, true);
+        assert.strictEqual(finished2, true);
+        assert.strictEqual(finished3, true);
+        assert.strictEqual(aborting, true);
+        assert.strictEqual(sawError, true);
+      });
+      client.on('error', function(err) {
+        assert.strictEqual(sawError, false);
+        assert.strictEqual(typeof err, 'object');
+        assert.strictEqual(err.code, 2013);
+        sawError = true;
+      });
+      client.query("SELECT SLEEP(60) ret", function(err, rows) {
+        assert.strictEqual(typeof err, 'object');
+        assert.strictEqual(err.code, 2013);
+        assert.strictEqual(rows, undefined);
+        finished1 = true;
+      });
+      client.query("SELECT SLEEP(0.1) ret", function(err, rows) {
+        assert.strictEqual(typeof err, 'object');
+        assert.strictEqual(err.code, 2013);
+        assert.strictEqual(rows, undefined);
+        finished2 = true;
+      });
+      client.query("SELECT SLEEP(0.1) ret", function(err, rows) {
+        assert.strictEqual(typeof err, 'object');
+        assert.strictEqual(err.code, 2013);
+        assert.strictEqual(rows, undefined);
+        finished3 = true;
+      });
+      setTimeout(function() {
+        aborting = true;
+        client.abort(true, function(err) {
+          assert.strictEqual(err, null);
+        });
+      }, 1000);
+    }
+  },
+  { what: 'keep pending queries on close',
+    run: function() {
+      var finished1 = false;
+      var finished2 = false;
+      var finished3 = false;
+      var aborting = false;
+      var sawError = false;
+      var closes = 0;
+      var client = makeClient({ cleanupReqs: false, _skipClose: true });
+      client.on('close', function() {
+        assert.strictEqual(finished1, true);
+        assert.strictEqual(aborting, true);
+        assert.strictEqual(sawError, true);
+        if (++closes === 1) {
+          assert.strictEqual(finished2, false);
+          assert.strictEqual(finished3, false);
+          client.connect();
+          return;
+        }
+        assert.strictEqual(closes, 2);
+        assert.strictEqual(finished2, true);
+        assert.strictEqual(finished3, true);
+        next();
+      });
+      client.on('error', function(err) {
+        assert.strictEqual(sawError, false);
+        assert.strictEqual(typeof err, 'object');
+        assert.strictEqual(err.code, 2013);
+        sawError = true;
+      });
+      client.query("SELECT SLEEP(60) ret", function(err, rows) {
+        assert.strictEqual(typeof err, 'object');
+        assert.strictEqual(err.code, 2013);
+        assert.strictEqual(rows, undefined);
+        finished1 = true;
+      });
+      client.query("SELECT SLEEP(0.1) ret", function(err, rows) {
+        assert.strictEqual(err, null);
+        assert.deepStrictEqual(
+          rows,
+          appendProps(
+            [ {ret: '0'} ],
+            { info: {
+                numRows: '1',
+                affectedRows: '1',
+                insertId: '0',
+                metadata: undefined
+              }
+            }
+          )
+        );
+        finished2 = true;
+      });
+      client.query("SELECT SLEEP(0.1) ret", function(err, rows) {
+        assert.strictEqual(err, null);
+        assert.deepStrictEqual(
+          rows,
+          appendProps(
+            [ {ret: '0'} ],
+            { info: {
+                numRows: '1',
+                affectedRows: '1',
+                insertId: '0',
+                metadata: undefined
+              }
+            }
+          )
+        );
+        finished3 = true;
+        client.end();
+      });
+      setTimeout(function() {
+        aborting = true;
+        client.abort(true, function(err) {
+          assert.strictEqual(err, null);
+        });
+      }, 1000);
     }
   },
 ];
@@ -526,7 +681,8 @@ function makeClient(opts, closeCb) {
 
   if (typeof opts === 'object' && opts !== null) {
     Object.keys(opts).forEach(function(key) {
-      config[key] = opts[key];
+      if (key !== '_skipClose') // Internal option for testing only
+        config[key] = opts[key];
     });
   } else if (typeof opts === 'function') {
     closeCb = opts;
@@ -535,11 +691,13 @@ function makeClient(opts, closeCb) {
 
   var client = new Client(config);
 
-  process.nextTick(function() {
-    if (typeof closeCb === 'function')
-      client.on('close', closeCb);
-    client.on('close', next);
-  });
+  if (!opts || !opts._skipClose) {
+    process.nextTick(function() {
+      if (typeof closeCb === 'function')
+        client.on('close', closeCb);
+      client.on('close', next);
+    });
+  }
 
   return client;
 }
