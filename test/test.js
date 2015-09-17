@@ -820,12 +820,18 @@ process.once('uncaughtException', function(err) {
   if (t > -1 && !/(?:^|\n)AssertionError: /i.test(''+err))
     console.error(makeMsg('Unexpected Exception:'));
   else if (t > -1) {
-    // Remake the assertion error since `JSON.stringify()` has a tendency to
-    // remove properties
-    err.message = format('\n%s\n%s\n%s',
-                         inspect(err.actual, false, 6),
-                         err.operator,
-                         inspect(err.expected, false, 6));
+    // Only change the message format when it's necessary to make it potentially
+    // more readable
+    if ((typeof err.actual === 'object' && err.actual !== null)
+        || (typeof err.expected === 'object' && err.expected !== null)) {
+      // Remake the assertion error since `JSON.stringify()` has a tendency to
+      // remove properties from `.actual` and `.expected` objects
+      err.message = format('\n%s\n%s\n%s',
+                           inspect(err.actual, false, 6),
+                           err.operator,
+                           inspect(err.expected, false, 6));
+    }
+
     // Hack in the name of the test that failed
     var oldStack = err.stack;
     var oldMsg = err.message;
