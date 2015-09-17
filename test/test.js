@@ -438,6 +438,82 @@ var tests = [
       });
     }
   },
+  { what: 'Process queue before connection close',
+    run: function() {
+      var finished = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+      });
+      client.query("SELECT 'hello' col1", function(err, rows) {
+        assert.strictEqual(err, null);
+        assert.deepStrictEqual(
+          rows,
+          appendProps(
+            [ {col1: 'hello'} ],
+            { info: {
+                numRows: '1',
+                affectedRows: '1',
+                insertId: '0',
+                metadata: undefined
+              }
+            }
+          )
+        );
+      });
+      client.query("SELECT 'world' col2", function(err, rows) {
+        assert.strictEqual(err, null);
+        assert.deepStrictEqual(
+          rows,
+          appendProps(
+            [ {col2: 'world'} ],
+            { info: {
+                numRows: '1',
+                affectedRows: '1',
+                insertId: '0',
+                metadata: undefined
+              }
+            }
+          )
+        );
+        finished = true;
+      });
+      client.end();
+    }
+  },
+  { what: 'Abort long running query',
+    run: function() {
+      var finished = false;
+      var sawAbortCb = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+        assert.strictEqual(sawAbortCb, true);
+      });
+      var query = client.query("SELECT SLEEP(60) ret", function(err, rows) {
+        assert.strictEqual(err, null);
+        assert.deepStrictEqual(
+          rows,
+          appendProps(
+            [ {ret: '1'} ],
+            { info: {
+                numRows: '1',
+                affectedRows: '1',
+                insertId: '0',
+                metadata: undefined
+              }
+            }
+          )
+        );
+        finished = true;
+        client.end();
+      });
+      setTimeout(function() {
+        client.abort(function(err) {
+          assert.strictEqual(err, null);
+          sawAbortCb = true;
+        });
+      }, 3000);
+    }
+  },
 ];
 
 function makeClient(opts, closeCb) {
