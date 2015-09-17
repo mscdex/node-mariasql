@@ -5,6 +5,7 @@ var format = require('util').format;
 var inspect = require('util').inspect;
 
 var t = -1;
+var testCaseTimeout = (process.env.CI && process.env.TRAVIS ? 30 : 10) * 1000;
 var timeout;
 
 function NOOP(err) { assert.strictEqual(err, null); }
@@ -760,7 +761,7 @@ function next() {
   var v = tests[++t];
   timeout = setTimeout(function() {
     throw new Error(format('Test case %j timed out', v.what));
-  }, 10 * 1000);
+  }, testCaseTimeout);
   console.log('Executing %j', v.what);
   v.run.call(v);
 }
