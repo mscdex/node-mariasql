@@ -284,6 +284,7 @@ class Client : public Nan::ObjectWrap {
     bool need_metadata;
     int state;
     int last_status;
+    unsigned long threadId;
 #define X(name)                                                                \
     Nan::Callback* on##name;
     EVENT_NAMES
@@ -295,6 +296,7 @@ class Client : public Nan::ObjectWrap {
 
       is_destructing = false;
       initialized = false;
+      threadId = 0;
 
 #define X(name)                                                                \
       on##name = NULL;
@@ -316,7 +318,7 @@ class Client : public Nan::ObjectWrap {
     }
 
     void init() {
-      DBG_LOG("init()\n");
+      DBG_LOG("[%lu] init()\n", threadId);
       if (initialized)
         clear_state();
 
@@ -369,7 +371,7 @@ class Client : public Nan::ObjectWrap {
     }
 
     bool close() {
-      DBG_LOG("close() state=%s\n", state_strings[state]);
+      DBG_LOG("[%lu] close() state=%s\n", threadId, state_strings[state]);
       initialized = false;
 
       clear_state();
@@ -390,7 +392,7 @@ class Client : public Nan::ObjectWrap {
     }
 
     bool connect() {
-      DBG_LOG("connect() state=%s\n", state_strings[state]);
+      DBG_LOG("[%lu] connect() state=%s\n", threadId, state_strings[state]);
       if (state == STATE_CLOSED) {
         Ref();
         state = STATE_CONNECT;
@@ -401,8 +403,9 @@ class Client : public Nan::ObjectWrap {
     }
 
     bool query(const char* qry, bool columns, bool metadata, bool buffer) {
-      DBG_LOG("query() state=%s,columns=%d,metadata=%d,buffer=%d,query=%s\n",
-              state_strings[state], columns, metadata, buffer, qry);
+      DBG_LOG("[%lu] query() state=%s,columns=%d,metadata=%d,buffer=%d,"
+              "query=%s\n",
+              threadId, state_strings[state], columns, metadata, buffer, qry);
       if (state == STATE_IDLE) {
         cur_query = (char*)qry;
         req_columns = columns;
@@ -444,8 +447,8 @@ class Client : public Nan::ObjectWrap {
     }*/
 
     bool pause() {
-      DBG_LOG("pause() state=%s,is_paused=%d\n",
-              state_strings[state], is_paused);
+      DBG_LOG("[%lu] pause() state=%s,is_paused=%d\n",
+              threadId, state_strings[state], is_paused);
       if (state >= STATE_IDLE && !is_paused) {
         is_paused = true;
         return true;
@@ -454,8 +457,8 @@ class Client : public Nan::ObjectWrap {
     }
 
     bool resume() {
-      DBG_LOG("resume() state=%s,is_paused=%d\n",
-              state_strings[state], is_paused);
+      DBG_LOG("[%lu] resume() state=%s,is_paused=%d\n",
+              threadId, state_strings[state], is_paused);
       if (state == STATE_ROW && is_paused) {
         is_paused = false;
         do_work(last_status);
@@ -465,7 +468,7 @@ class Client : public Nan::ObjectWrap {
     }
 
     bool ping() {
-      DBG_LOG("ping() state=%s\n", state_strings[state]);
+      DBG_LOG("[%lu] ping() state=%s\n", threadId, state_strings[state]);
       if (state == STATE_IDLE) {
         state = STATE_PING;
         do_work();
@@ -475,8 +478,9 @@ class Client : public Nan::ObjectWrap {
     }
 
     uint64_t lastInsertId() {
-      DBG_LOG("lastInsertId() state=%s\n", state_strings[state]);
-      
+      DBG_LOG("[%lu] lastInsertId() state=%s\n",
+              threadId, state_strings[state]);
+
       return static_cast<uint64_t>(mysql_insert_id(&mysql));
     }
 
@@ -487,7 +491,8 @@ class Client : public Nan::ObjectWrap {
     void do_work(int event = 0) {
       if (state == STATE_CLOSED)
         return;
-      DBG_LOG("do_work() state=%s,event=%s\n",
+      DBG_LOG("[%lu] do_work() state=%s,event=%s\n",
+              threadId,
               state_strings[state],
               ((event & (UV_READABLE|UV_WRITABLE)) == (UV_READABLE|UV_WRITABLE)
                ? "READABLE,WRITABLE"
@@ -501,8 +506,8 @@ class Client : public Nan::ObjectWrap {
       int err;
       bool done = false;
       while (!done) {
-        DBG_LOG("do_work() loop begin, state=%s,is_cont=%d\n",
-                state_strings[state], is_cont);
+        DBG_LOG("[%lu] do_work() loop begin, state=%s,is_cont=%d\n",
+                threadId, state_strings[state], is_cont);
         switch (state) {
           case STATE_CONNECT:
             if (!is_cont) {
@@ -538,6 +543,7 @@ class Client : public Nan::ObjectWrap {
                 is_cont = true;
               } else {
                 state = STATE_IDLE;
+                threadId = mysql_thread_id(&mysql);
                 on_connect();
                 return;
               }
@@ -553,6 +559,7 @@ class Client : public Nan::ObjectWrap {
                   return;
                 }
                 state = STATE_IDLE;
+                threadId = mysql_thread_id(&mysql);
                 on_connect();
                 return;
               }
@@ -813,8 +820,8 @@ class Client : public Nan::ObjectWrap {
           default:
             done = true;
         }
-        DBG_LOG("do_work() loop end, state=%s,is_cont=%d,done=%d\n",
-                state_strings[state], is_cont, done);
+        DBG_LOG("[%lu] do_work() loop end, state=%s,is_cont=%d,done=%d\n",
+                threadId, state_strings[state], is_cont, done);
       }
 
       // if we're currently paused due to backpressure, it is important that we
@@ -836,7 +843,8 @@ class Client : public Nan::ObjectWrap {
       last_status = status;
 
       uv_poll_start(poll_handle, new_events, cb_poll);
-      DBG_LOG("do_work() end, new_events=%s\n",
+      DBG_LOG("[%lu] do_work() end, new_events=%s\n",
+              threadId,
               ((event & (UV_READABLE|UV_WRITABLE)) == (UV_READABLE|UV_WRITABLE)
                ? "READABLE,WRITABLE"
                : event & UV_READABLE
@@ -850,7 +858,8 @@ class Client : public Nan::ObjectWrap {
       Nan::HandleScope scope;
 
       Client* obj = (Client*)handle->data;
-      DBG_LOG("cb_close() state=%s\n", state_strings[obj->state]);
+      DBG_LOG("[%lu] cb_close() state=%s\n",
+              obj->threadId, state_strings[obj->state]);
 
       FREE(obj->poll_handle);
       obj->onclose->Call(Nan::New<Object>(obj->context), 0, NULL);
@@ -858,7 +867,8 @@ class Client : public Nan::ObjectWrap {
 
     static void cb_poll(uv_poll_t* handle, int status, int events) {
       Client* obj = (Client*)handle->data;
-      DBG_LOG("cb_poll() state=%s\n", state_strings[obj->state]);
+      DBG_LOG("[%lu] cb_poll() state=%s\n",
+              obj->threadId, state_strings[obj->state]);
 
       assert(status == 0);
 
@@ -873,7 +883,7 @@ class Client : public Nan::ObjectWrap {
 
     void on_connect() {
       Nan::HandleScope scope;
-      DBG_LOG("on_connect() state=%s\n", state_strings[state]);
+      DBG_LOG("[%lu] on_connect() state=%s\n", threadId, state_strings[state]);
       onconnect->Call(Nan::New<Object>(context), 0, NULL);
     }
 
@@ -881,7 +891,7 @@ class Client : public Nan::ObjectWrap {
                   const char* errMsg = NULL) {
       Nan::HandleScope scope;
 
-      DBG_LOG("on_error() state=%s\n", state_strings[state]);
+      DBG_LOG("[%lu] on_error() state=%s\n", threadId, state_strings[state]);
 
       unsigned int errCode = mysql_errno(&mysql);
 
@@ -900,8 +910,8 @@ class Client : public Nan::ObjectWrap {
     }
 
     void on_row() {
-      DBG_LOG("on_row() state=%s,need_columns=%d,need_metadata=%d\n",
-              state_strings[state], need_columns, need_metadata);
+      DBG_LOG("[%lu] on_row() state=%s,need_columns=%d,need_metadata=%d\n",
+              threadId, state_strings[state], need_columns, need_metadata);
 
       unsigned int n_fields = (cur_result ? mysql_num_fields(cur_result) : 0);
 
@@ -947,8 +957,8 @@ class Client : public Nan::ObjectWrap {
     }
 
     void on_rows() {
-      DBG_LOG("on_rows() state=%s,need_columns=%d,need_metadata=%d\n",
-              state_strings[state], need_columns, need_metadata);
+      DBG_LOG("[%lu] on_rows() state=%s,need_columns=%d,need_metadata=%d\n",
+              threadId, state_strings[state], need_columns, need_metadata);
 
       unsigned int n_fields = (cur_result ? mysql_num_fields(cur_result) : 0);
 
@@ -1075,15 +1085,17 @@ class Client : public Nan::ObjectWrap {
       uint64_t insertId = mysql_insert_id(&mysql);
 
       if (affRows == (my_ulonglong)-1) {
-        DBG_LOG("on_resultend() state=%s,"
+        DBG_LOG("[%lu] on_resultend() state=%s,"
                  "numRows=%" PRIu64 ",affRows=-1,insertId=%" PRIu64 "\n",
+                threadId,
                 state_strings[state],
                 numRows,
                 insertId);
       } else {
-        DBG_LOG("on_resultend() state=%s,"
+        DBG_LOG("[%lu] on_resultend() state=%s,"
                  "numRows=%" PRIu64 ",affRows=%" PRIu64 ",insertId=%"
                  PRIu64 "\n",
+                threadId,
                 state_strings[state],
                 numRows,
                 affRows,
@@ -1121,19 +1133,19 @@ class Client : public Nan::ObjectWrap {
     void on_ping() {
       Nan::HandleScope scope;
 
-      DBG_LOG("on_ping() state=%s\n", state_strings[state]);
+      DBG_LOG("[%lu] on_ping() state=%s\n", threadId, state_strings[state]);
       onping->Call(Nan::New<Object>(context), 0, NULL);
     }
 
     void on_idle() {
       Nan::HandleScope scope;
 
-      DBG_LOG("on_idle() state=%s\n", state_strings[state]);
+      DBG_LOG("[%lu] on_idle() state=%s\n", threadId, state_strings[state]);
       onidle->Call(Nan::New<Object>(context), 0, NULL);
     }
 
     void apply_config(Local<Object> cfg) {
-      DBG_LOG("apply_config()\n");
+      DBG_LOG("[%lu] apply_config()\n", threadId);
 
       if (state != STATE_CLOSED)
         return;
@@ -1325,8 +1337,8 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(SetConfig) {
-      DBG_LOG("clientBinding->setConfig()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
+      DBG_LOG("[%lu] clientBinding->setConfig()\n", obj->threadId);
 
       if (info.Length() > 0 && info[0]->IsObject()) {
         Local<Object> cfg = info[0]->ToObject();
@@ -1335,8 +1347,8 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(Connect) {
-      DBG_LOG("clientBinding->connect()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
+      DBG_LOG("[%lu] clientBinding->connect()\n", obj->threadId);
 
       if (obj->state != STATE_CLOSED)
         return Nan::ThrowError("Already connected");
@@ -1351,37 +1363,37 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(Close) {
-      DBG_LOG("clientBinding->close()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
+      DBG_LOG("[%lu] clientBinding->close()\n", obj->threadId);
 
       if (!obj->close())
         Nan::ThrowError("Not connected");
     }
 
     static NAN_METHOD(Pause) {
-      DBG_LOG("clientBinding->pause()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
+      DBG_LOG("[%lu] clientBinding->pause()\n", obj->threadId);
 
       obj->pause();
     }
 
     static NAN_METHOD(Resume) {
-      DBG_LOG("clientBinding->resume()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
+      DBG_LOG("[%lu] clientBinding->resume()\n", obj->threadId);
 
       obj->resume();
     }
 
     static NAN_METHOD(Ping) {
-      DBG_LOG("clientBinding->ping()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
+      DBG_LOG("[%lu] clientBinding->ping()\n", obj->threadId);
 
       obj->ping();
     }
 
     static NAN_METHOD(LastInsertId) {
-      DBG_LOG("clientBinding->lastInsertId()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
+      DBG_LOG("[%lu] clientBinding->lastInsertId()\n", obj->threadId);
 
       uint64_t insertId = obj->lastInsertId();
 
@@ -1396,8 +1408,8 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(Query) {
-      DBG_LOG("clientBinding->query()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
+      DBG_LOG("[%lu] clientBinding->query()\n", obj->threadId);
 
       if (obj->state != STATE_IDLE)
         return Nan::ThrowError("Not ready to query");
@@ -1431,8 +1443,8 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(Escape) {
-      DBG_LOG("clientBinding->escape()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
+      DBG_LOG("[%lu] clientBinding->escape()\n", obj->threadId);
 
       if (obj->state == STATE_CLOSED)
         return Nan::ThrowError("Not connected");
@@ -1450,8 +1462,8 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(IsMariaDB) {
-      DBG_LOG("clientBinding->isMariaDB()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
+      DBG_LOG("[%lu] clientBinding->isMariaDB()\n", obj->threadId);
 
       if (obj->state == STATE_CLOSED)
         return Nan::ThrowError("Not connected");
@@ -1462,8 +1474,8 @@ class Client : public Nan::ObjectWrap {
     }
 
     static NAN_METHOD(ServerVersion) {
-      DBG_LOG("clientBinding->serverVersion()\n");
       Client* obj = Nan::ObjectWrap::Unwrap<Client>(info.This());
+      DBG_LOG("[%lu] clientBinding->serverVersion()\n", obj->threadId);
 
       if (obj->state == STATE_CLOSED)
         return Nan::ThrowError("Not connected");
