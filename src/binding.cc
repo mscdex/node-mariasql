@@ -271,7 +271,6 @@ class Client : public Nan::ObjectWrap {
     sql_config config;
     bool initialized;
     bool is_cont;
-    bool is_aborting;
     bool is_destructing;
     bool is_paused;
     bool is_buffering;
@@ -346,8 +345,6 @@ class Client : public Nan::ObjectWrap {
       config.ssl_cipher = NULL;
 
       is_cont = false;
-
-      is_aborting = false;
 
       is_paused = false;
 
