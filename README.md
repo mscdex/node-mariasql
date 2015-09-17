@@ -16,11 +16,14 @@ This binding has been tested on Windows, Linux, and Mac (OSX 10.6).
 Benchmarks comparing this module to the other node.js MySQL driver modules can be
 found [here](http://mscdex.github.com/node-mysql-benchmarks).
 
+[![Build Status](https://travis-ci.org/mscdex/node-mariasql.svg?branch=rewrite)](https://travis-ci.org/mscdex/node-mariasql)
+[![Build status](https://ci.appveyor.com/api/projects/status/xx3pxdmpqept0uc2)](https://ci.appveyor.com/project/mscdex/node-mariasql)
+
 
 Requirements
 ============
 
-* [node.js](http://nodejs.org/) -- v0.8.0 or newer
+* [node.js](http://nodejs.org/) -- v0.10.0 or newer
 
 
 Install
@@ -32,44 +35,22 @@ Install
 Examples
 ========
 
-* Simple query to retrieve a list of all databases:
+* Simple query:
 
 ```javascript
-var inspect = require('util').inspect;
 var Client = require('mariasql');
 
-var c = new Client();
-c.connect({
+var c = new Client({
   host: '127.0.0.1',
   user: 'foo',
   password: 'bar'
 });
 
-c.on('connect', function() {
-   console.log('Client connected');
- })
- .on('error', function(err) {
-   console.log('Client error: ' + err);
- })
- .on('close', function(hadError) {
-   console.log('Client closed');
- });
-
-c.query('SHOW DATABASES')
- .on('result', function(res) {
-   res.on('row', function(row) {
-     console.log('Result row: ' + inspect(row));
-   })
-   .on('error', function(err) {
-     console.log('Result error: ' + inspect(err));
-   })
-   .on('end', function(info) {
-     console.log('Result finished successfully');
-   });
- })
- .on('end', function() {
-   console.log('Done with all results');
- });
+c.query('SHOW DATABASES', function(err, rows) {
+  if (err)
+    throw err;
+  console.dir(rows);
+});
 
 c.end();
 ```
@@ -77,60 +58,57 @@ c.end();
 * Use placeholders in a query
 
 ```javascript
-var inspect = require('util').inspect;
 var Client = require('mariasql');
 
-var c = new Client();
-c.connect({
+var c = new Client({
   host: '127.0.0.1',
   user: 'foo',
   password: 'bar',
   db: 'mydb'
 });
 
-c.on('connect', function() {
-   console.log('Client connected');
- })
- .on('error', function(err) {
-   console.log('Client error: ' + err);
- })
- .on('close', function(hadError) {
-   console.log('Client closed');
- });
-
 c.query('SELECT * FROM users WHERE id = :id AND name = :name',
-        { id: 1337, name: 'Frylock' })
- .on('result', function(res) {
-   res.on('row', function(row) {
-     console.log('Result row: ' + inspect(row));
-   })
-   .on('error', function(err) {
-     console.log('Result error: ' + inspect(err));
-   })
-   .on('end', function(info) {
-     console.log('Result finished successfully');
-   });
- })
- .on('end', function() {
-   console.log('Done with all results');
- });
+        { id: 1337, name: 'Frylock' },
+        function(err, rows) {
+  if (err)
+    throw err;
+  console.dir(rows);
+});
 
 c.query('SELECT * FROM users WHERE id = ? AND name = ?',
-        [ 1337, 'Frylock' ])
- .on('result', function(res) {
-   res.on('row', function(row) {
-     console.log('Result row: ' + inspect(row));
-   })
-   .on('error', function(err) {
-     console.log('Result error: ' + inspect(err));
-   })
-   .on('end', function(info) {
-     console.log('Result finished successfully');
-   });
- })
- .on('end', function() {
-   console.log('Done with all results');
- });
+        [ 1337, 'Frylock' ],
+        function(err, rows) {
+  if (err)
+    throw err;
+  console.dir(rows);
+});
+
+c.end();
+```
+
+* Stream rows
+
+```javascript
+var Client = require('mariasql');
+
+var c = new Client({
+  host: '127.0.0.1',
+  user: 'foo',
+  password: 'bar',
+  db: 'mydb'
+});
+
+var query = c.query('SELECT * FROM users WHERE id = '1');
+query.on('result', function(res) {
+  // `res` is a streams2+ Readable object stream
+  res.on('data', function(row) {
+    console.dir(row);
+  }).on('end', function() {
+    console.log('Result set finished');
+  });
+}).on('end', function() {
+  console.log('No more result sets!');
+});
 
 c.end();
 ```
@@ -138,105 +116,24 @@ c.end();
 * Explicitly generate a prepared query for later use
 
 ```javascript
-var inspect = require('util').inspect;
 var Client = require('mariasql');
 
-var c = new Client();
-c.connect({
+var c = new Client({
   host: '127.0.0.1',
   user: 'foo',
   password: 'bar',
   db: 'mydb'
 });
 
-c.on('connect', function() {
-   console.log('Client connected');
- })
- .on('error', function(err) {
-   console.log('Client error: ' + err);
- })
- .on('close', function(hadError) {
-   console.log('Client closed');
- });
+var prep = c.prepare('SELECT * FROM users WHERE id = :id AND name = :name');
 
-var pq = c.prepare('SELECT * FROM users WHERE id = :id AND name = :name');
-
-c.query(pq({ id: 1337, name: 'Frylock' }))
- .on('result', function(res) {
-   res.on('row', function(row) {
-     console.log('Result row: ' + inspect(row));
-   })
-   .on('error', function(err) {
-     console.log('Result error: ' + inspect(err));
-   })
-   .on('end', function(info) {
-     console.log('Result finished successfully');
-   });
- })
- .on('end', function() {
-   console.log('Done with all results');
- });
-
-c.end();
-```
-
-* Abort the second query when doing multiple statements
-
-```javascript
-var inspect = require('util').inspect;
-var Client = require('mariasql');
-
-var c = new Client(), qcnt = 0;
-c.connect({
-  host: '127.0.0.1',
-  user: 'foo',
-  password: 'bar',
-  multiStatements: true
+c.query(prep({ id: 1337, name: 'Frylock' }), function(err, rows) {
+  if (err)
+    throw err;
+  console.dir(rows);
 });
 
-c.on('connect', function() {
-   console.log('Client connected');
- })
- .on('error', function(err) {
-   console.log('Client error: ' + err);
- })
- .on('close', function(hadError) {
-   console.log('Client closed');
- });
-
-c.query('SELECT "first query"; SELECT "second query"; SELECT "third query"', true)
- .on('result', function(res) {
-   if (++qcnt === 2)
-     res.abort();
-   res.on('row', function(row) {
-     console.log('Query #' + (qcnt) + ' row: ' + inspect(row));
-   })
-   .on('error', function(err) {
-     console.log('Query #' + (qcnt) + ' error: ' + inspect(err));
-   })
-   .on('abort', function() {
-     console.log('Query #' + (qcnt) + ' was aborted');
-   })
-   .on('end', function(info) {
-     console.log('Query #' + (qcnt) + ' finished successfully');
-   });
- })
- .on('end', function() {
-   console.log('Done with all queries');
- });
-
 c.end();
-
-/* output:
-    Client connected
-    Query #1 row: [ 'first query' ]
-    Query #1 finished successfully
-    Query #2 was aborted
-    Query #3 row: [ 'third query' ]
-    Query #3 finished successfully
-    Done with all queries
-    Client closed
- */
 ```
 
 
@@ -245,22 +142,25 @@ API
 
 `require('mariasql')` returns a **_Client_** object
 
+
 Client properties
 -----------------
 
-* **connected** - < _boolean_ > - Set to true if the Client is currently connected.
+* **connected** - _boolean_ - `true` if the Client instance is currently connected.
 
-* **threadId** - < _string_ > - If connected, this is the thread id of this connection on the server.
+* **threadId** - _string_ - If connected, this is the thread id of this connection on the server.
 
 
 Client events
 -------------
 
-* **connect**() - Connection and authentication with the server was successful.
+* **ready**() - Connection and authentication with the server was successful.
 
 * **error**(< _Error_ >err) - An error occurred at the connection level.
 
-* **close**(< _boolean_ >hadError) - The connection was closed. `hadError` is set to true if this was due to a connection-level error.
+* **end**() - The connection ended gracefully.
+
+* **close**() - The connection has closed.
 
 
 Client methods
@@ -270,81 +170,118 @@ Client methods
 
 * **connect**(< _object_ >config) - _(void)_ - Attempts a connection to a server using the information given in `config`:
 
-    * **user** - < _string_ > - Username for authentication. **Default:** (\*nix: current login name, Windows: ???)
+    * **user** - _string_ - Username for authentication. **Default:** (\*nix: current login name, Windows: ???)
 
-    * **password** - < _string_ > - Password for authentication. **Default:** (blank password)
+    * **password** - _string_ - Password for authentication. **Default:** (blank password)
 
-    * **host** - < _string_ > - Hostname or IP address of the MySQL/MariaDB server. **Default:** "localhost"
+    * **host** - _string_ - Hostname or IP address of the MySQL/MariaDB server. **Default:** "localhost"
 
-    * **port** - < _integer_ > - Port number of the MySQL/MariaDB server. **Default:** 3306
+    * **port** - _integer_ - Port number of the MySQL/MariaDB server. **Default:** 3306
 
-    * **unixSocket** - < _string_ > - Path to a unix socket to connect to (host and port are ignored). **Default:** (none)
+    * **unixSocket** - _string_ - Path to a unix socket to connect to (host and port are ignored). **Default:** (none)
 
-    * **db** - < _string_ > - A database to automatically select after authentication. **Default:** (no db)
+    * **db** - _string_ - A database to automatically select after authentication. **Default:** (no db)
 
-    * **keepQueries** - < _boolean_ > - Keep query queue when connection closes? **Default:** false
+    * **cleanupReqs** - _boolean_ - Clear query queue after connection closes? (Only relevant if reusing Client instance) **Default:** true
 
-    * **multiStatements** - < _boolean_ > - Allow multiple statements to be executed in a single "query" (e.g. `connection.query('SELECT 1; SELECT 2; SELECT 3')`) on this connection. **Default:** false
+    * **multiStatements** - _boolean_ - Allow multiple statements to be executed in a single "query" (e.g. `connection.query('SELECT 1; SELECT 2; SELECT 3')`) on this connection. **Default:** false
 
-    * **connTimeout** - < _integer_ > - Number of seconds to wait for a connection to be made. **Default:** 10
+    * **connTimeout** - _integer_ - Number of seconds to wait for a connection to be made. **Default:** 10
 
-    * **pingInterval** - < _integer_ > - Number of seconds between pings while idle. **Default:** 60
+    * **pingInterval** - _integer_ - Number of seconds between pings while idle. **Default:** 60
 
-    * **secureAuth** - < _boolean_ > - Use password hashing available in MySQL 4.1.1+ when authenticating. **Default:** true
+    * **secureAuth** - _boolean_ - Use password hashing available in MySQL 4.1.1+ when authenticating. **Default:** true
 
-    * **compress** - < _boolean_ > - Use connection compression? **Default:** false
+    * **compress** - _boolean_ - Use connection compression? **Default:** false
 
-    * **ssl** - < _mixed_ > - If boolean true, defaults listed below and default ciphers will be used, otherwise it must be an object with any of the following valid properties: **Default:** false
+    * **ssl** - _mixed_ - If boolean true, defaults listed below and default ciphers will be used, otherwise it must be an object with any of the following valid properties: **Default:** false
 
-        * **key** - < _string_ > - Path to a client private key file in PEM format (if the key requires a passphrase and libmysqlclient was built with yaSSL (bundled Windows libraries are), an error will occur). **Default:** (none)
+        * **key** - _string_ - Path to a client private key file in PEM format (if the key requires a passphrase and libmysqlclient was built with yaSSL (bundled Windows libraries are), an error will occur). **Default:** (none)
 
-        * **cert** - < _string_ > - Path to a client certificate key file in PEM format. **Default:** (none)
+        * **cert** - _string_ - Path to a client certificate key file in PEM format. **Default:** (none)
 
-        * **ca** - < _string_ > - Path to a file in PEM format that contains a list of trusted certificate authorities. **Default:** (none)
+        * **ca** - _string_ - Path to a file in PEM format that contains a list of trusted certificate authorities. **Default:** (none)
 
-        * **capath** - < _string_ > - Path to a directory containing certificate authority certificate files in PEM format. **Default:** (none)
+        * **capath** - _string_ - Path to a directory containing certificate authority certificate files in PEM format. **Default:** (none)
 
-        * **cipher** - < _string_ > - A colon-delimited list of ciphers to use when connecting. **Default:** "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH" (if cipher is set to anything other than false or non-empty string)
+        * **cipher** - _string_ - A colon-delimited list of ciphers to use when connecting. **Default:** "ECDHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL:!EDH" (if cipher is set to anything other than false or non-empty string)
 
-        * **rejectUnauthorized** - < _boolean_ > - If true, the connection will be rejected if the Common Name value does not match that of the host name. **Default:** false
+        * **rejectUnauthorized** - _boolean_ - If true, the connection will be rejected if the Common Name value does not match that of the host name. **Default:** false
 
-    * **local_infile** - < _boolean_ > - If true, will set "local-infile" for the client. **Default:** (none)
+    * **local_infile** - _boolean_ - If true, will set "local-infile" for the client. **Default:** (none)
 
         > **NOTE:** the server needs to have its own local-infile = 1 under the [mysql] and/or [mysqld] sections of my.cnf
 
-    * **read_default_file** - < _string_ > - Provide a path to the my.cnf configuration file to be used by the client. Sets MYSQL_READ_DEFAULT_FILE option in the C client.  **Default:** (none)
+    * **read_default_file** - _string_ - Provide a path to the my.cnf configuration file to be used by the client. Sets MYSQL_READ_DEFAULT_FILE option in the C client.  **Default:** (none)
 
         > **FROM MAN PAGE:** These options can be used to read a config file like /etc/my.cnf or ~/.my.cnf. By default MySQL's C client library doesn't use any config files unlike the client programs (mysql, mysqladmin, ...) that do, but outside of the C client library. Thus you need to explicitly request reading a config file...
 
-    * **read_default_group** - < _string_ > - Provide the name of the group to be read in the my.cnf configuration file without the square brackets e.g. "client" for section [client] in my.cnf.  If not set but "read_default_file" is set, the client tries to read from these groups: [client] or [client-server] or [client-mariadb]. Sets MYSQL_READ_DEFAULT_GROUP option in the C client.  **Default:** (none)
+    * **read_default_group** - _string_ - Provide the name of the group to be read in the my.cnf configuration file without the square brackets e.g. "client" for section [client] in my.cnf.  If not set but "read_default_file" is set, the client tries to read from these groups: [client] or [client-server] or [client-mariadb]. Sets MYSQL_READ_DEFAULT_GROUP option in the C client.  **Default:** (none)
 
-    * **charset** - < _string_ > - Set the connection's charset. **Default:** 'utf8'
+    * **charset** - _string_ - The connection's charset.
 
-* **query**(< _string_ >query[, < _mixed_ >values[, < _boolean_ >useArray=false]]) - < _Results_ > - Enqueues the given `query` and returns a _Results_ object. `values` can be an object or array containing values to be used when replacing placeholders in `query` (see prepare()). If `useArray` is set to true, then an array of field values are returned instead of an object of fieldName=>fieldValue pairs. (Note: using arrays performs much faster)
+    * **streamHWM** - _integer_ - A global `highWaterMark` to use for all result set streams for this connection. This value can also be supplied/overriden on a per-query basis.
 
-* **prepare**(< _string_ >query) - < _function_ > - Generates a re-usable function for `query` when it contains placeholders (can be simple `?` position-based or named `:foo_bar1` placeholders or any combination of the two). In the case that the function does contain placeholders, the generated function is cached per-connection if it is not already in the cache (currently the cache will hold at most **30** prepared queries). The returned function takes an object or array and returns the query with the placeholders replaced by the values in the object or array. **Note:** Every value is converted to a (utf8) string when filling the placeholders.
+* **query**(< _string_ >query[, < _mixed_ >values[, < _object_ >options]][, < _function_ >callback]) - _mixed_ - Enqueues the given `query` and returns a _Results_ object. `values` can be an object or array containing values to be used when replacing placeholders in `query` (see prepare()). If supplying `options` without `values`, you must pass `null` for `values`. If `callback` is supplied, all rows are buffered in memory and `callback` receives `(err, rows)` (`rows` also contains an `info` object containing information about the result set, including metadata if requested). Valid `options`:
 
-* **escape**(< _string_ >value) - < _string_ > - Escapes `value` for use in queries. **_This method requires a live connection_**.
+    * **useArray** - _boolean_ - When `true`, arrays are used to store row values instead of an object keyed on column names. (Note: using arrays performs much faster)
+
+    * **metadata** - _boolean_ - When `true`, column metadata is also retrieved and available for each result set.
+
+    * **hwm** - _integer_ - This is the `highWaterMark` of result set streams. If you supply a `callback`, this option has no effect.
+
+* **prepare**(< _string_ >query) - _function_ - Generates a re-usable function for `query` when it contains placeholders (can be simple `?` position-based or named `:foo_bar1` placeholders or any combination of the two). In the case that the function does contain placeholders, the generated function is cached per-connection if it is not already in the cache (currently the cache will hold at most **30** prepared queries). The returned function takes an object or array and returns the query with the placeholders replaced by the values in the object or array. **Note:** Every value is converted to a (utf8) string when filling the placeholders.
+
+* **escape**(< _string_ >value) - _string_ - Escapes `value` for use in queries. **_This method requires a live connection_**.
+
+* **isMariaDB**() - _boolean_ - Returns `true` if the remote server is MariaDB.
+
+* **abort**([< _boolean_ >killConnection][, < _function_ >callback]) - _(void)_ - If `killConnection === true`, then the current connection is killed. Otherwise, just the currently running query is killed. This does not affect queries that have already finished but are in the process of transferring results.
+
+* **lastInsertId**() - _string_ - Returns the last inserted auto-increment id. If you insert multiple rows in a single query, then this value will return the auto-increment id of the first row, not the last.
+
+* **serverVersion**() - _string_ - Returns a string containing the server version.
 
 * **end**() - _(void)_ - Closes the connection once all queries in the queue have been executed.
 
 * **destroy**() - _(void)_ - Closes the connection immediately, even if there are other queries still in the queue.
 
-* **isMariaDB**() - < _boolean_ > - Returns true if the remote server is MariaDB.
+
+Client static properties
+------------------------
+
+* Column flags (in metadata):
+
+    * **Client.NOT_NULL_FLAG**: Field cannot be NULL
+    * **Client.PRI_KEY_FLAG**: Field is part of a primary key
+    * **Client.UNIQUE_KEY_FLAG**: Field is part of a unique key
+    * **Client.MULTIPLE_KEY_FLAG**: Field is part of a nonunique key
+    * **Client.BLOB_FLAG**: Field is a BLOB or TEXT (deprecated)
+    * **Client.UNSIGNED_FLAG**: Field has the UNSIGNED attribute
+    * **Client.ZEROFILL_FLAG**: Field has the ZEROFILL attribute
+    * **Client.BINARY_FLAG**: Field has the BINARY attribute
+    * **Client.ENUM_FLAG**: Field is an ENUM
+    * **Client.AUTO_INCREMENT_FLAG**: Field has the AUTO_INCREMENT attribute
+    * **Client.TIMESTAMP_FLAG**: Field is a TIMESTAMP (deprecated)
+    * **Client.SET_FLAG**: Field is a SET
+    * **Client.NO_DEFAULT_VALUE_FLAG**: Field has no default value
+    * **Client.ON_UPDATE_NOW_FLAG**: Field is set to NOW on UPDATE
+    * **Client.PART_KEY_FLAG**: Field is part of some key
+    * **Client.NUM_FLAG**: Field is numeric
 
 
 Client static methods
 ---------------------
 
-* **escape**(< _string_ >value) - < _string_ > - Escapes `value` for use in queries. **_This method does not take into account character encodings_**.
+* **escape**(< _string_ >value) - _string_ - Escapes `value` for use in queries. **_This method does not take into account character encodings_**.
+
+* **version**() - _string_ - Returns a string containing the libmariadbclient version number.
 
 
 Results events
 --------------
 
-* **result**(< _Query_ >res) - `res` represents the result of a single query.
-
-* **abort**() - The results were aborted (the 'end' event will not be emitted) by way of results.abort().
+* **result**(< _ResultSetStream_ >res) - `res` represents the result of a single result set.
 
 * **error**(< _Error_ >err) - An error occurred while processing this set of results (the 'end' event will not be emitted).
 
@@ -357,29 +294,13 @@ Results methods
 * **abort**() - _(void)_ - Aborts any remaining queries (if multiple statements are used) immediately if the queries are either currently queued or are (about to start) returning rows (if applicable). This is a passive abort, so if the current query is still being processed on the server side, the queries will not be aborted until the server finishes processing the current query (i.e. when rows are about to be returned for SELECT queries). In any case, you can always kill the currently running query early by executing "KILL QUERY _client_threadId_" from a separate connection (note: this query can be dangerous if modifying information without transactions).
 
 
-Query events
-------------
+`ResultSetStream` is a standard streams2+ Readable object stream. Some things to note:
 
-* **row**(< _mixed_ >row) - `row` is either an object of fieldName=>fieldValue pairs **or** just an array of the field values (in either case, JavaScript nulls are used for MySQL NULLs), depending on how query() was called.
+* `ResultSetStream` instances have an `info` property that contains result set-specific information, such as metadata, row count, number of affected rows, and last insert id. These values are populated and available at the `end` event.
 
-* **abort**() - The query was aborted (the 'end' event will not be emitted) by way of query.abort().
-
-* **error**(< _Error_ >err) - An error occurred while executing this query (the 'end' event will not be emitted).
-
-* **end**(< _object_ >info) - The query finished _successfully_. `info` contains statistics such as 'affectedRows', 'insertId', and 'numRows.'
-
-
-Query methods
--------------
-
-* **abort**() - _(void)_ - Aborts query immediately if the query is either currently queued or is (about to start) returning rows (if applicable). If the query is still being processed on the server side, the query will not be aborted until the server finishes processing it (i.e. when rows are about to be returned for SELECT queries). In any case, you can always kill the currently running query early by executing "KILL QUERY _client_threadId_" from a separate connection (note: this query is dangerous if modifying information without transactions).
 
 
 TODO
 ====
 
 * Auto-reconnect algorithm(s) ?
-
-* API to execute "KILL QUERY _client_threadId_" easily
-
-* Possibly some other stuff I'm not aware of at the moment
