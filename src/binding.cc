@@ -581,7 +581,8 @@ class Client : public Nan::ObjectWrap {
                 if (err) {
                   state = STATE_IDLE;
                   on_error();
-                  on_idle();
+                  if (state != STATE_CLOSED)
+                    on_idle();
                 } else {
                   if (is_buffering)
                     state = STATE_STORERESULT;
@@ -598,7 +599,8 @@ class Client : public Nan::ObjectWrap {
                 if (err) {
                   state = STATE_IDLE;
                   on_error();
-                  on_idle();
+                  if (state != STATE_CLOSED)
+                    on_idle();
                 } else {
                   if (is_buffering)
                     state = STATE_STORERESULT;
@@ -897,6 +899,9 @@ class Client : public Nan::ObjectWrap {
 
       if (errNo > 0)
         errCode = errNo;
+
+      if (IS_DEAD_ERRNO(errCode))
+        state = STATE_CLOSED;
 
       Local<Object> err =
           Nan::Error(errMsg ? errMsg : mysql_error(&mysql))->ToObject();
