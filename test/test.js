@@ -5,7 +5,7 @@ var format = require('util').format;
 var inspect = require('util').inspect;
 
 var t = -1;
-var testCaseTimeout = (process.env.CI && process.env.TRAVIS ? 30 : 10) * 1000;
+var testCaseTimeout = 10 * 1000;
 var timeout;
 
 function NOOP(err) { assert.strictEqual(err, null); }
@@ -485,9 +485,11 @@ var tests = [
     run: function() {
       var finished = false;
       var sawAbortCb = false;
-      var client = makeClient(function() {
-        assert.strictEqual(finished, true);
-        assert.strictEqual(sawAbortCb, true);
+      var closes = 0;
+      var client = makeClient({ _skipClose: true });
+      client.on('close', function() {
+        assert.strictEqual(++closes, 1);
+        checkDone();
       });
       client.query("SELECT SLEEP(60) ret", function(err, rows) {
         assert.strictEqual(err, null);
@@ -506,43 +508,61 @@ var tests = [
         );
         finished = true;
         client.end();
+        checkDone();
       });
       setTimeout(function() {
         client.abort(function(err) {
           assert.strictEqual(err, null);
           sawAbortCb = true;
+          checkDone();
         });
       }, 1000);
+
+      function checkDone() {
+        if (finished && sawAbortCb && closes === 1)
+          next();
+      }
     }
   },
   { what: 'Abort connection',
     run: function() {
       var finished = false;
-      var aborting = false;
+      var sawAbortCb = false;
       var sawError = false;
-      var client = makeClient(function() {
-        assert.strictEqual(finished, true);
-        assert.strictEqual(aborting, true);
-        assert.strictEqual(sawError, true);
+      var closes = 0;
+      var client = makeClient({ _skipClose: true });
+      client.on('close', function() {
+        assert.strictEqual(++closes, 1);
+        checkDone();
       });
       client.on('error', function(err) {
         assert.strictEqual(sawError, false);
         assert.strictEqual(typeof err, 'object');
         assert.strictEqual(err.code, 2013);
+        assert.strictEqual(client.connected, false);
         sawError = true;
       });
       client.query("SELECT SLEEP(60) ret", function(err, rows) {
         assert.strictEqual(typeof err, 'object');
         assert.strictEqual(err.code, 2013);
         assert.strictEqual(rows, undefined);
+        assert.strictEqual(client.connected, false);
         finished = true;
+        checkDone();
       });
       setTimeout(function() {
-        aborting = true;
         client.abort(true, function(err) {
           assert.strictEqual(err, null);
+          sawAbortCb = true;
+          checkDone();
         });
       }, 1000);
+
+      function checkDone() {
+        console.log(finished, sawAbortCb, sawError, closes);
+        if (finished && sawAbortCb && sawError && closes === 1)
+          next();
+      }
     }
   },
   { what: 'clean up pending queries on close',
@@ -550,45 +570,57 @@ var tests = [
       var finished1 = false;
       var finished2 = false;
       var finished3 = false;
-      var aborting = false;
+      var sawAbortCb = false;
       var sawError = false;
-      var client = makeClient(function() {
-        assert.strictEqual(finished1, true);
-        assert.strictEqual(finished2, true);
-        assert.strictEqual(finished3, true);
-        assert.strictEqual(aborting, true);
-        assert.strictEqual(sawError, true);
+      var closes = 0;
+      var client = makeClient({ _skipClose: true });
+      client.on('close', function() {
+        assert.strictEqual(++closes, 1);
+        checkDone();
       });
       client.on('error', function(err) {
         assert.strictEqual(sawError, false);
         assert.strictEqual(typeof err, 'object');
         assert.strictEqual(err.code, 2013);
+        assert.strictEqual(client.connected, false);
         sawError = true;
       });
       client.query("SELECT SLEEP(60) ret", function(err, rows) {
         assert.strictEqual(typeof err, 'object');
         assert.strictEqual(err.code, 2013);
         assert.strictEqual(rows, undefined);
+        assert.strictEqual(client.connected, false);
         finished1 = true;
       });
       client.query("SELECT SLEEP(0.1) ret", function(err, rows) {
         assert.strictEqual(typeof err, 'object');
         assert.strictEqual(err.code, 2013);
         assert.strictEqual(rows, undefined);
+        assert.strictEqual(client.connected, false);
         finished2 = true;
       });
       client.query("SELECT SLEEP(0.1) ret", function(err, rows) {
         assert.strictEqual(typeof err, 'object');
         assert.strictEqual(err.code, 2013);
         assert.strictEqual(rows, undefined);
+        assert.strictEqual(client.connected, false);
         finished3 = true;
+        checkDone();
       });
       setTimeout(function() {
-        aborting = true;
         client.abort(true, function(err) {
           assert.strictEqual(err, null);
+          sawAbortCb = true;
+          checkDone();
         });
       }, 1000);
+
+      function checkDone() {
+        if (finished1 && finished2 && finished3 && sawAbortCb && sawError
+            && closes === 1) {
+          next();
+        }
+      }
     }
   },
   { what: 'keep pending queries on close',
@@ -596,13 +628,12 @@ var tests = [
       var finished1 = false;
       var finished2 = false;
       var finished3 = false;
-      var aborting = false;
+      var sawAbortCb = false;
       var sawError = false;
       var closes = 0;
       var client = makeClient({ cleanupReqs: false, _skipClose: true });
       client.on('close', function() {
         assert.strictEqual(finished1, true);
-        assert.strictEqual(aborting, true);
         assert.strictEqual(sawError, true);
         if (++closes === 1) {
           assert.strictEqual(finished2, false);
@@ -613,18 +644,20 @@ var tests = [
         assert.strictEqual(closes, 2);
         assert.strictEqual(finished2, true);
         assert.strictEqual(finished3, true);
-        next();
+        checkDone();
       });
       client.on('error', function(err) {
         assert.strictEqual(sawError, false);
         assert.strictEqual(typeof err, 'object');
         assert.strictEqual(err.code, 2013);
+        assert.strictEqual(client.connected, false);
         sawError = true;
       });
       client.query("SELECT SLEEP(60) ret", function(err, rows) {
         assert.strictEqual(typeof err, 'object');
         assert.strictEqual(err.code, 2013);
         assert.strictEqual(rows, undefined);
+        assert.strictEqual(client.connected, false);
         finished1 = true;
       });
       client.query("SELECT SLEEP(0.1) ret", function(err, rows) {
@@ -642,6 +675,7 @@ var tests = [
             }
           )
         );
+        assert.strictEqual(client.connected, true);
         finished2 = true;
       });
       client.query("SELECT SLEEP(0.1) ret", function(err, rows) {
@@ -659,15 +693,24 @@ var tests = [
             }
           )
         );
+        assert.strictEqual(client.connected, true);
         finished3 = true;
         client.end();
       });
       setTimeout(function() {
-        aborting = true;
         client.abort(true, function(err) {
           assert.strictEqual(err, null);
+          sawAbortCb = true;
+          checkDone();
         });
       }, 1000);
+
+      function checkDone() {
+        if (finished1 && finished2 && finished3 && sawAbortCb && sawError
+            && closes === 2) {
+          next();
+        }
+      }
     }
   },
 ];
