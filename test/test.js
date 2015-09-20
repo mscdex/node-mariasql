@@ -559,7 +559,6 @@ var tests = [
       }, 1000);
 
       function checkDone() {
-        console.log(finished, sawAbortCb, sawError, closes);
         if (finished && sawAbortCb && sawError && closes === 1)
           next();
       }
