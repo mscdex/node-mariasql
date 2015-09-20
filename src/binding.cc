@@ -121,6 +121,17 @@ using namespace v8;
   X(cipher)                                                                    \
   X(rejectUnauthorized)
 
+#ifdef _WIN32
+# define CHECK_CONNRESET (WSAGetLastError() == WSAECONNRESET   ||              \
+                          WSAGetLastError() == WSAENOTCONN     ||              \
+                          WSAGetLastError() == WSAECONNABORTED ||              \
+                          WSAGetLastError() == WSAENETRESET    ||              \
+                          WSAGetLastError() == WSAENETDOWN)
+#else
+# include <errno.h>
+# define CHECK_CONNRESET (errno == ECONNRESET || errno == ENOTCONN)
+#endif
+
 Nan::Persistent<FunctionTemplate> constructor;
 //Nan::Persistent<FunctionTemplate> stmt_constructor;
 Nan::Persistent<String> code_symbol;
@@ -128,6 +139,7 @@ Nan::Persistent<String> context_symbol;
 Nan::Persistent<String> conncfg_symbol;
 Nan::Persistent<String> neg_one_symbol;
 char u64_buf[21];
+char conn_check_buf[1];
 
 #define X(state, val)                                                          \
 const int STATE_##state = val;
@@ -305,7 +317,7 @@ class Client : public Nan::ObjectWrap {
     }
 
     ~Client() {
-      DBG_LOG("~Client()\n");
+      DBG_LOG("[%lu] ~Client()\n", threadId);
 #define X(name)                                                                \
       if (on##name)                                                            \
         delete on##name;
@@ -370,13 +382,17 @@ class Client : public Nan::ObjectWrap {
       FREE(config.charset);
     }
 
-    bool close() {
-      DBG_LOG("[%lu] close() state=%s\n", threadId, state_strings[state]);
+    bool close(bool is_dead=false) {
+      DBG_LOG("[%lu] close() state=%s,is_dead=%s,is_destructing=%s\n",
+              threadId,
+              state_strings[state],
+              (is_dead ? "true" : "false"),
+              (is_destructing ? "true" : "false"));
       initialized = false;
 
       clear_state();
 
-      if (state != STATE_CLOSED) {
+      if (state != STATE_CLOSED || is_dead) {
         state = STATE_CLOSED;
         Unref();
         mysql_close(&mysql);
@@ -384,7 +400,9 @@ class Client : public Nan::ObjectWrap {
           if (poll_handle)
             uv_poll_stop(poll_handle);
           FREE(poll_handle);
-        } else
+        } else if (is_dead)
+          uv_close((uv_handle_t*)poll_handle, cb_close_dummy);
+        else
           uv_close((uv_handle_t*)poll_handle, cb_close);
         return true;
       }
@@ -489,8 +507,6 @@ class Client : public Nan::ObjectWrap {
     }
 
     void do_work(int event = 0) {
-      if (state == STATE_CLOSED)
-        return;
       DBG_LOG("[%lu] do_work() state=%s,event=%s\n",
               threadId,
               state_strings[state],
@@ -505,6 +521,18 @@ class Client : public Nan::ObjectWrap {
       int new_events = 0;
       int err;
       bool done = false;
+
+      if (state == STATE_CLOSED)
+        return;
+      else if (state == STATE_IDLE && event) {
+        // Check for closed socket since we don't expect events if we are idle
+        int r = recv(mysql_sock, conn_check_buf, 1, MSG_PEEK);
+        if (r == 0 || (r == -1 && CHECK_CONNRESET)) {
+          on_error(true, 2006, "MySQL server has gone away");
+          return;
+        }
+      }
+
       while (!done) {
         DBG_LOG("[%lu] do_work() loop begin, state=%s,is_cont=%d\n",
                 threadId, state_strings[state], is_cont);
@@ -844,7 +872,11 @@ class Client : public Nan::ObjectWrap {
       // state
       last_status = status;
 
-      uv_poll_start(poll_handle, new_events, cb_poll);
+      if (state == STATE_CLOSED)
+        new_events = 0;
+      else
+        uv_poll_start(poll_handle, new_events, cb_poll);
+
       DBG_LOG("[%lu] do_work() end, new_events=%s\n",
               threadId,
               ((event & (UV_READABLE|UV_WRITABLE)) == (UV_READABLE|UV_WRITABLE)
@@ -854,6 +886,9 @@ class Client : public Nan::ObjectWrap {
                  : event & UV_WRITABLE
                    ? "WRITABLE"
                    : "NONE"));
+    }
+
+    static void cb_close_dummy(uv_handle_t* handle) {
     }
 
     static void cb_close(uv_handle_t* handle) {
@@ -893,9 +928,16 @@ class Client : public Nan::ObjectWrap {
                   const char* errMsg = NULL) {
       Nan::HandleScope scope;
 
-      DBG_LOG("[%lu] on_error() state=%s\n", threadId, state_strings[state]);
-
       unsigned int errCode = mysql_errno(&mysql);
+
+      DBG_LOG("[%lu] on_error() state=%s,doClose=%s,errNo=%d,errMsg=%s,"
+               "mysql_errno=%u\n",
+              threadId,
+              state_strings[state],
+              (doClose ? "true" : "false"),
+              errNo,
+              errMsg,
+              errCode);
 
       if (errNo > 0)
         errCode = errNo;
@@ -911,7 +953,7 @@ class Client : public Nan::ObjectWrap {
       onerror->Call(Nan::New<Object>(context), 1, argv);
 
       if (doClose || IS_DEAD_ERRNO(errCode))
-        close();
+        close(IS_DEAD_ERRNO(errCode));
     }
 
     void on_row() {
