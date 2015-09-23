@@ -1199,7 +1199,7 @@ mysql_escape_string_ex(char *to,const char *from,ulong length,const char *set)
 {
   CHARSET_INFO *charset = default_charset_info;
   if (strcmp(set, "utf8") == 0)
-    charset = &my_charset_utf8_general_ci;
+    charset = &my_charset_utf8_unicode_ci;
   else if (strcmp(set, "latin1") == 0)
     charset = &my_charset_latin1;
   return (uint) escape_string_for_mysql(charset, to, 0, from, length);
