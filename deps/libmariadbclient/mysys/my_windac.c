@@ -29,7 +29,8 @@
 
 static my_bool is_nt()
 {
-  return GetVersion() < 0x80000000;
+  // XXX: always assume non-prehistoric OS by mscdex
+  return 1;
 }
 
 /*
