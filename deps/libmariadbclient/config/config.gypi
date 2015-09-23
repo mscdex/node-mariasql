@@ -1,9 +1,6 @@
 {
   'defines': [
     'HAVE_YASSL',
-    #'HAVE_OPENSSL',
-    #'YASSL_PURE_C',
-    #'YASSL_PREFIX',
     'YASSL_THREAD_SAFE',
     'DBUG_OFF',
   ],
@@ -15,6 +12,8 @@
   'cflags_c+': [ '-O3' ],
   'conditions': [
     [ 'OS=="win"', {
+      # Silence compiler warnings for now. These should be fixed upstream ...
+      'msvs_disabled_warnings': [4090, 4114, 4244, 4267],
       'include_dirs': [ 'win' ],
     }, {
       'defines': [ 'HAVE_CONFIG_H', ],
