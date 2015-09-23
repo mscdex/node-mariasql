@@ -86,7 +86,7 @@ typedef volatile LONG my_pthread_once_t;
 #define MY_PTHREAD_ONCE_INPROGRESS 1
 #define MY_PTHREAD_ONCE_DONE 2
 
-// VS2015 has timespec -bw
+// XXX: VS2015 has timespec by mscdex
 #if defined(_MSC_VER) && _MSC_VER >= 1900
 # include <time.h>
 #else

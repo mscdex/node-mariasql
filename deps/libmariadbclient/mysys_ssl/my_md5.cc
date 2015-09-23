@@ -26,7 +26,7 @@
 #include <my_md5.h>
 
 #if defined(HAVE_YASSL)
-// simplify config -bw
+// XXX: simplify config by mscdex
 #include "config.h"
 #include "md5.hpp"
 

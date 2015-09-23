@@ -480,7 +480,7 @@
 
 #define SYSTEM_TYPE "osx10.6"
 #define MACHINE_TYPE "i386"
-/* Disable DTrace for now ... -bw
+// XXX: disable DTrace for now by mscdex
 #define HAVE_DTRACE 1 */
 
 #define SIGNAL_WITH_VIO_CLOSE 1

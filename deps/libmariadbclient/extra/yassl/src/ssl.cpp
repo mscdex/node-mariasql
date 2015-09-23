@@ -42,7 +42,7 @@
 
 #ifdef _WIN32
     #include <windows.h>    // FindFirstFile etc..
-    // support VS2010 -bw
+    // XXX: support VS2010 by mscdex
     #define snprintf(buf, bufSize, format, arg) _snprintf_s(buf, bufSize, _TRUNCATE, format, arg)
 #else
     #include <sys/types.h>  // file helper
