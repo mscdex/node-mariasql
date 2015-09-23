@@ -13,7 +13,7 @@
   'conditions': [
     [ 'OS=="win"', {
       # Silence compiler warnings for now. These should be fixed upstream ...
-      'msvs_disabled_warnings': [4090, 4114, 4244, 4267],
+      'msvs_disabled_warnings': [4090, 4114, 4244, 4267, 4577],
       'include_dirs': [ 'win' ],
     }, {
       'defines': [ 'HAVE_CONFIG_H', ],

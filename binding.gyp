@@ -14,7 +14,7 @@
       'conditions': [
         [ 'OS=="win"', {
             # Re-enable warnings that were disabled for libmariadbclient
-            'msvs_disabled_warnings!': [4090, 4114, 4244, 4267],
+            'msvs_disabled_warnings!': [4090, 4114, 4244, 4267, 4577],
             'libraries': [
               '-lws2_32.lib',
             ],
