@@ -72,7 +72,7 @@
 #define CPP_UNNAMED_NS_END    }
 #endif
 
-/* Simplify configuration file references -bw */
+// XXX: simplify configuration file references by mscdex
 #include <config.h>
 #include "snprintf.h"
 

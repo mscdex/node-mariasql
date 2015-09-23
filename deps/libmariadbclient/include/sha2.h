@@ -16,7 +16,7 @@
 #ifndef included_sha2_h
 #define included_sha2_h
 
-// simplify config -bw
+// XXX: simplify config by mscdex
 #include "config.h"
 
 #if defined(HAVE_YASSL) || defined(HAVE_OPENSSL)
