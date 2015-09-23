@@ -508,9 +508,6 @@
 #define ssize_t SSIZE_T
 #define strcasecmp _stricmp
 #define strncasecmp _strnicmp
-#if (_MSC_VER < 1900)
-# define snprintf _snprintf
-#endif
 #define strtok_r strtok_s
 #define strtoll _strtoi64
 #define strtoull _strtoui64
