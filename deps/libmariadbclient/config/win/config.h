@@ -499,7 +499,9 @@
 #define mode_t int
 #define SIGQUIT SIGTERM
 #define SIGPIPE SIGINT
-#define isnan _isnan
+#if (_MSC_VER < 1800)
+# define isnan _isnan
+#endif
 #define finite _finite
 #define popen _popen
 #define pclose _pclose
