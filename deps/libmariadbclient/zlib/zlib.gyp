@@ -37,6 +37,7 @@
         'zutil.c',
         'zutil.h',
       ],
+      'includes': [ '../config/config.gypi' ],
       'include_dirs': [
         '.',
       ],
