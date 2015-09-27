@@ -630,7 +630,7 @@ var tests = [
       var sawAbortCb = false;
       var sawError = false;
       var closes = 0;
-      var client = makeClient({ cleanupReqs: false, _skipClose: true });
+      var client = makeClient({ keepQueries: true, _skipClose: true });
       client.on('close', function() {
         assert.strictEqual(finished1, true);
         assert.strictEqual(sawError, true);
