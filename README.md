@@ -15,7 +15,7 @@ found [here](http://mscdex.github.com/node-mysql-benchmarks).
 [![Build Status](https://travis-ci.org/mscdex/node-mariasql.svg?branch=rewrite)](https://travis-ci.org/mscdex/node-mariasql)
 [![Build status](https://ci.appveyor.com/api/projects/status/xx3pxdmpqept0uc2)](https://ci.appveyor.com/project/mscdex/node-mariasql)
 
-Upgrading from v0.1.x? See a list of (breaking) changes [here](https://github.com/mscdex/node-mariasql/wiki/Upgrading-v0.1.x-to-v0.2.x);
+Upgrading from v0.1.x? See a list of (breaking) changes [here](https://github.com/mscdex/node-mariasql/wiki/Upgrading-v0.1.x-to-v0.2.x).
 
 
 Requirements
