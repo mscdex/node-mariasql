@@ -439,6 +439,43 @@ var tests = [
       });
     }
   },
+  { what: 'multiStatements',
+    run: function() {
+      var finished = false;
+      var client = makeClient({ multiStatements: true }, function() {
+        assert.strictEqual(finished, true);
+      });
+      client.query("SELECT 'hello' c1; SELECT 'world' c2", function(err, rows) {
+        assert.strictEqual(err, null);
+        assert.deepStrictEqual(
+          rows,
+          [ appendProps(
+              [ { c1: 'hello' } ],
+              { info: {
+                  numRows: '1',
+                  affectedRows: '1',
+                  insertId: '0',
+                  metadata: undefined
+                }
+              }
+            ),
+            appendProps(
+              [ { c2: 'world' } ],
+              { info: {
+                  numRows: '1',
+                  affectedRows: '1',
+                  insertId: '0',
+                  metadata: undefined
+                }
+              }
+            )
+          ]
+        );
+        finished = true;
+        client.end();
+      });
+    }
+  },
   { what: 'Process queue before connection close',
     run: function() {
       var finished = false;
