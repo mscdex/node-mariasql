@@ -5,19 +5,17 @@ Description
 A [node.js](http://nodejs.org/) binding to MariaDB's non-blocking (MySQL-compatible) client
 library.
 
-This binding is different from other vanilla libmysqlclient bindings in that it
-uses the non-blocking functions available in MariaDB's client library.
-
-Therefore, this binding does **_not_** use multiple threads to achieve non-blocking
-behavior.
-
-This binding has been tested on Windows, Linux, and Mac (OSX 10.6).
+This binding is different from a vanilla libmysqlclient binding in that it
+uses the non-blocking functions available in MariaDB's client library. As a result,
+this binding does **_not_** use multiple threads to achieve non-blocking behavior.
 
 Benchmarks comparing this module to the other node.js MySQL driver modules can be
 found [here](http://mscdex.github.com/node-mysql-benchmarks).
 
 [![Build Status](https://travis-ci.org/mscdex/node-mariasql.svg?branch=rewrite)](https://travis-ci.org/mscdex/node-mariasql)
 [![Build status](https://ci.appveyor.com/api/projects/status/xx3pxdmpqept0uc2)](https://ci.appveyor.com/project/mscdex/node-mariasql)
+
+Upgrading from v0.1.x? See a list of (breaking) changes [here](https://github.com/mscdex/node-mariasql/wiki/Upgrading-v0.1.x-to-v0.2.x);
 
 
 Requirements
@@ -47,6 +45,47 @@ var c = new Client({
 });
 
 c.query('SHOW DATABASES', function(err, rows) {
+  if (err)
+    throw err;
+  console.dir(rows);
+});
+
+c.end();
+```
+
+* Get column metadata:
+
+```javascript
+var Client = require('mariasql');
+
+var c = new Client({
+  host: '127.0.0.1',
+  user: 'foo',
+  password: 'bar'
+});
+
+c.query('SHOW DATABASES', null, { metadata: true }, function(err, rows) {
+  if (err)
+    throw err;
+  // `rows.info.metadata` contains the metadata
+  console.dir(rows);
+});
+
+c.end();
+```
+
+* Use arrays (faster) instead of objects for rows:
+
+```javascript
+var Client = require('mariasql');
+
+var c = new Client({
+  host: '127.0.0.1',
+  user: 'foo',
+  password: 'bar'
+});
+
+c.query('SHOW DATABASES', null, { useArray: true }, function(err, rows) {
   if (err)
     throw err;
   console.dir(rows);
@@ -146,7 +185,9 @@ API
 Client properties
 -----------------
 
-* **connected** - _boolean_ - `true` if the Client instance is currently connected.
+* **connected** - _boolean_ - `true` if the Client instance is currently connected to the server.
+
+* **connecting** - _boolean_ - `true` if the Client instance is currently in the middle of connecting to the server.
 
 * **threadId** - _string_ - If connected, this is the thread id of this connection on the server.
 
@@ -236,7 +277,7 @@ Client methods
 
 * **isMariaDB**() - _boolean_ - Returns `true` if the remote server is MariaDB.
 
-* **abort**([< _boolean_ >killConnection][, < _function_ >callback]) - _(void)_ - If `killConnection === true`, then the current connection is killed. Otherwise, just the currently running query is killed. This does not affect queries that have already finished but are in the process of transferring results.
+* **abort**([< _boolean_ >killConn][, < _function_ >callback]) - _(void)_ - If `killConn === true`, then the current connection is killed (via a `KILL xxxx` query on a separate, temporary connection). Otherwise, just the currently running query is killed (via a `KILL QUERY xxxx` query on a separate, temporary connection). When killing just the currently running query, this method will have no effect if the query has already finished but is merely in the process of transferring results from the server to the client.
 
 * **lastInsertId**() - _string_ - Returns the last inserted auto-increment id. If you insert multiple rows in a single query, then this value will return the auto-increment id of the first row, not the last.
 
@@ -281,26 +322,13 @@ Client static methods
 Results events
 --------------
 
-* **result**(< _ResultSetStream_ >res) - `res` represents the result of a single result set.
+* **result**(< _ResultSetStream_ >res) - `res` represents a single result set.
 
 * **error**(< _Error_ >err) - An error occurred while processing this set of results (the 'end' event will not be emitted).
 
 * **end**() - All queries in this result set finished _successfully_.
 
 
-Results methods
----------------
-
-* **abort**() - _(void)_ - Aborts any remaining queries (if multiple statements are used) immediately if the queries are either currently queued or are (about to start) returning rows (if applicable). This is a passive abort, so if the current query is still being processed on the server side, the queries will not be aborted until the server finishes processing the current query (i.e. when rows are about to be returned for SELECT queries). In any case, you can always kill the currently running query early by executing "KILL QUERY _client_threadId_" from a separate connection (note: this query can be dangerous if modifying information without transactions).
-
-
 `ResultSetStream` is a standard streams2+ Readable object stream. Some things to note:
 
 * `ResultSetStream` instances have an `info` property that contains result set-specific information, such as metadata, row count, number of affected rows, and last insert id. These values are populated and available at the `end` event.
-
-
-
-TODO
-====
-
-* Auto-reconnect algorithm(s) ?
