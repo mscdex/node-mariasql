@@ -182,7 +182,7 @@ Client methods
 
     * **db** - _string_ - A database to automatically select after authentication. **Default:** (no db)
 
-    * **cleanupReqs** - _boolean_ - Clear query queue after connection closes? (Only relevant if reusing Client instance) **Default:** true
+    * **keepQueries** - _boolean_ - Keep enqueued queries that haven't started executing, after the connection closes? (Only relevant if reusing Client instance) **Default:** false
 
     * **multiStatements** - _boolean_ - Allow multiple statements to be executed in a single "query" (e.g. `connection.query('SELECT 1; SELECT 2; SELECT 3')`) on this connection. **Default:** false
 
