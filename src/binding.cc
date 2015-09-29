@@ -649,6 +649,12 @@ class Client : public Nan::ObjectWrap {
             if (!cur_result) {
               if (mysql_errno(&mysql))
                 on_error();
+              else {
+                // this is needed for statements that do not return a result set
+                // so that javascript land can at least emit a stream with the
+                // appropriate query info attached ...
+                on_resultend();
+              }
               if (mysql_more_results(&mysql))
                 state = STATE_NEXTRESULT;
               else {

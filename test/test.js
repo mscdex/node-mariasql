@@ -415,6 +415,49 @@ var tests = [
       });
     }
   },
+  { what: 'Streamed result (INSERT)',
+    run: function() {
+      var finished = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+        assert.deepStrictEqual(
+          events,
+          [ 'result',
+            [ 'result.end',
+              { numRows: '0',
+                affectedRows: '2',
+                insertId: '1',
+                metadata: undefined
+              }
+            ],
+            'query.end'
+          ]
+        );
+        finished = true;
+        client.end();
+      });
+      var events = [];
+      makeFooTable(client, {
+        id: { type: 'INT', options: ['AUTO_INCREMENT', 'PRIMARY KEY'] },
+        name: 'VARCHAR(255)'
+      });
+      var query = client.query(
+        "INSERT INTO foo VALUES (NULL, 'hello world'),(NULL, 'bar')"
+      );
+      query.on('result', function(res) {
+        events.push('result');
+        res.on('data', function(row) {
+          events.push(['result.data', row]);
+        }).on('end', function() {
+          events.push(['result.end', res.info]);
+        });
+      }).on('end', function() {
+        events.push('query.end');
+        finished = true;
+        client.end();
+      });
+    }
+  },
   { what: 'lastInsertId()',
     run: function() {
       var finished = false;
