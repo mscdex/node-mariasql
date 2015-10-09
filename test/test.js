@@ -458,6 +458,41 @@ var tests = [
       });
     }
   },
+  { what: 'Streamed result (START TRANSACTION, no data listener)',
+    run: function() {
+      var finished = false;
+      var client = makeClient(function() {
+        assert.strictEqual(finished, true);
+        assert.deepStrictEqual(
+          events,
+          [ 'result',
+            [ 'result.end',
+              { numRows: '0',
+                affectedRows: '0',
+                insertId: '0',
+                metadata: undefined
+              }
+            ],
+            'query.end'
+          ]
+        );
+        finished = true;
+        client.end();
+      });
+      var events = [];
+      var query = client.query('START TRANSACTION');
+      query.on('result', function(res) {
+        events.push('result');
+        res.on('end', function() {
+          events.push(['result.end', res.info]);
+        });
+      }).on('end', function() {
+        events.push('query.end');
+        finished = true;
+        client.end();
+      });
+    }
+  },
   { what: 'lastInsertId()',
     run: function() {
       var finished = false;
