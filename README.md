@@ -25,7 +25,7 @@ Requirements
 
 
 Install
-============
+=======
 
     npm install mariasql
 
@@ -220,6 +220,8 @@ Client methods
     * **port** - _integer_ - Port number of the MySQL/MariaDB server. **Default:** 3306
 
     * **unixSocket** - _string_ - Path to a unix socket to connect to (host and port are ignored). **Default:** (none)
+
+    * **protocol** - _string_ - Explicit connection method. Can be one of: `'tcp'`, `'socket'`, `'pipe'`, `'memory'`. Any other value uses the default behavior. **Default:** `'tcp'` if `host` or `port` are specified, `'socket'` if `unixSocket` is specified, otherwise default behavior is used.
 
     * **db** - _string_ - A database to automatically select after authentication. **Default:** (no db)
 

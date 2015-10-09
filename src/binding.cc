@@ -9,6 +9,8 @@
 #endif
 #ifndef _MSC_VER
 # include <limits>
+#else
+# define strcasecmp _stricmp
 #endif
 
 #include <node.h>
@@ -112,7 +114,8 @@ using namespace v8;
   X(tcpKeepalive)                                                              \
   X(tcpKeepaliveCnt)                                                           \
   X(tcpKeepaliveIntvl)                                                         \
-  X(ssl)
+  X(ssl)                                                                       \
+  X(protocol)
 #define CFG_OPTIONS_SSL                                                        \
   X(key)                                                                       \
   X(cert)                                                                      \
@@ -194,6 +197,11 @@ struct sql_config {
 
 const my_bool MY_BOOL_TRUE = 1;
 const my_bool MY_BOOL_FALSE = 0;
+const int PROTOCOL_TCP = MYSQL_PROTOCOL_TCP;
+const int PROTOCOL_SOCKET = MYSQL_PROTOCOL_SOCKET;
+const int PROTOCOL_PIPE = MYSQL_PROTOCOL_PIPE;
+const int PROTOCOL_MEMORY = MYSQL_PROTOCOL_MEMORY;
+const int PROTOCOL_DEFAULT = MYSQL_PROTOCOL_DEFAULT;
 
 // ripped from libuv
 #ifdef _WIN32
@@ -1230,18 +1238,37 @@ class Client : public Nan::ObjectWrap {
       else {
         Nan::Utf8String host_s(host_v);
         config.host = strdup(*host_s);
+        mysql_options(&mysql, MYSQL_OPT_PROTOCOL, &PROTOCOL_TCP);
       }
 
       if (!port_v->IsUint32() || port_v->Uint32Value() == 0)
         config.port = 3306;
-      else
+      else {
         config.port = port_v->Uint32Value();
+        mysql_options(&mysql, MYSQL_OPT_PROTOCOL, &PROTOCOL_TCP);
+      }
 
       if (!unixSocket_v->IsString() || unixSocket_v->ToString()->Length() == 0)
         config.unixSocket = NULL;
       else {
         Nan::Utf8String unixSocket_s(unixSocket_v);
         config.unixSocket = strdup(*unixSocket_s);
+        mysql_options(&mysql, MYSQL_OPT_PROTOCOL, &PROTOCOL_SOCKET);
+      }
+
+      if (protocol_v->IsString() && protocol_v->ToString()->Length() > 0) {
+        Nan::Utf8String protocol_s(protocol_v);
+        const char* protocol = *protocol_s;
+        if (strcasecmp(protocol, "tcp") == 0)
+          mysql_options(&mysql, MYSQL_OPT_PROTOCOL, &PROTOCOL_TCP);
+        else if (strcasecmp(protocol, "socket") == 0)
+          mysql_options(&mysql, MYSQL_OPT_PROTOCOL, &PROTOCOL_SOCKET);
+        else if (strcasecmp(protocol, "pipe") == 0)
+          mysql_options(&mysql, MYSQL_OPT_PROTOCOL, &PROTOCOL_PIPE);
+        else if (strcasecmp(protocol, "memory") == 0)
+          mysql_options(&mysql, MYSQL_OPT_PROTOCOL, &PROTOCOL_MEMORY);
+        else
+          mysql_options(&mysql, MYSQL_OPT_PROTOCOL, &PROTOCOL_DEFAULT);
       }
 
       if (db_v->IsString() && db_v->ToString()->Length() > 0) {
