@@ -29,7 +29,7 @@
 using namespace node;
 using namespace v8;
 
-#define DEBUG 0
+#define DEBUG 1
 
 
 #if defined(DEBUG) && DEBUG
@@ -925,7 +925,9 @@ class Client : public Nan::ObjectWrap {
 
       // When Linux cannot connect, EBADF is raised. Let libmariadbclient know
       // about it by faking a read event so we get a proper error message ...
-      if (status == UV_EBADF && obj->state == STATE_CONNECT)
+      // Additionally, we have to check `status != 0` because node v0.10 does
+      // not actually pass in UV_EBADF for `status`, but -1 instead.
+      if (status != 0 && obj->state == STATE_CONNECT)
         mysql_status = MYSQL_WAIT_READ;
       else  {
         assert(status == 0);
