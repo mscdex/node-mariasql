@@ -857,6 +857,36 @@ var tests = [
       });
     }
   },
+  { what: 'Bad auth',
+    run: function() {
+      var client = makeClient({ password: 'foobarbaz890' }, function() {
+        assert.deepStrictEqual(
+          events,
+          [ 'client.error' ]
+        );
+        client.end();
+      });
+      var events = [];
+      var query = client.query('SELECT 1');
+      query.on('result', function(res) {
+        events.push('result');
+        res.on('data', function(row) {
+          events.push(['result.data']);
+        }).on('end', function() {
+          events.push(['result.end']);
+        });
+      }).on('end', function() {
+        events.push('query.end');
+      });
+
+      client.on('error', function(err) {
+        assert.strictEqual(err.code, 1045);
+        events.push('client.error');
+      }).on('ready', function() {
+        events.push('ready');
+      });
+    }
+  },
 ];
 
 function makeClient(opts, closeCb) {
