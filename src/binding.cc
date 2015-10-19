@@ -921,13 +921,21 @@ class Client : public Nan::ObjectWrap {
       DBG_LOG("[%lu] cb_poll() state=%s\n",
               obj->threadId, state_strings[obj->state]);
 
-      assert(status == 0);
+      int mysql_status;
 
-      int mysql_status = 0;
-      if (events & UV_READABLE)
-        mysql_status |= MYSQL_WAIT_READ;
-      if (events & UV_WRITABLE)
-        mysql_status |= MYSQL_WAIT_WRITE;
+      // When Linux cannot connect, EBADF is raised. Let libmariadbclient know
+      // about it by faking a read event so we get a proper error message ...
+      if (status == UV_EBADF && obj->state == STATE_CONNECT)
+        mysql_status = MYSQL_WAIT_READ;
+      else  {
+        assert(status == 0);
+
+        mysql_status = 0;
+        if (events & UV_READABLE)
+          mysql_status |= MYSQL_WAIT_READ;
+        if (events & UV_WRITABLE)
+          mysql_status |= MYSQL_WAIT_WRITE;
+      }
 
       obj->do_work(mysql_status);
     }
