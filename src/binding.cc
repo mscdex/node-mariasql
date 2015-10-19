@@ -403,15 +403,15 @@ class Client : public Nan::ObjectWrap {
       if (state != STATE_CLOSED || is_dead) {
         state = STATE_CLOSED;
         Unref();
-        mysql_close(&mysql);
-        if (is_destructing) {
-          if (poll_handle)
+        if (poll_handle) {
+          if (is_destructing)
             uv_poll_stop(poll_handle);
-          FREE(poll_handle);
-        } else if (is_dead)
-          uv_close((uv_handle_t*)poll_handle, cb_close_dummy);
-        else
-          uv_close((uv_handle_t*)poll_handle, cb_close);
+          else if (is_dead)
+            uv_close((uv_handle_t*)poll_handle, cb_close_dummy);
+          else
+            uv_close((uv_handle_t*)poll_handle, cb_close);
+        }
+        mysql_close(&mysql);
         return true;
       }
       return false;
@@ -569,7 +569,8 @@ class Client : public Nan::ObjectWrap {
                   set_keepalive_intvl(mysql_sock, config.tcpkaIntvl);
               }
 
-              poll_handle = (uv_poll_t*)malloc(sizeof(uv_poll_t));
+              if (!poll_handle)
+                poll_handle = (uv_poll_t*)malloc(sizeof(uv_poll_t));
               uv_poll_init_socket(uv_default_loop(), poll_handle, mysql_sock);
               uv_poll_start(poll_handle, UV_READABLE, cb_poll);
               poll_handle->data = this;
@@ -912,7 +913,6 @@ class Client : public Nan::ObjectWrap {
       DBG_LOG("[%lu] cb_close() state=%s\n",
               obj->threadId, state_strings[obj->state]);
 
-      FREE(obj->poll_handle);
       obj->onclose->Call(Nan::New<Object>(obj->context), 0, NULL);
     }
 
@@ -938,7 +938,8 @@ class Client : public Nan::ObjectWrap {
       onconnect->Call(Nan::New<Object>(context), 0, NULL);
     }
 
-    void on_error(bool doClose = false, unsigned int errNo = 0,
+    void on_error(bool doClose = false,
+                  unsigned int errNo = 0,
                   const char* errMsg = NULL) {
       Nan::HandleScope scope;
 
@@ -963,11 +964,11 @@ class Client : public Nan::ObjectWrap {
           Nan::Error(errMsg ? errMsg : mysql_error(&mysql))->ToObject();
       err->Set(Nan::New<String>(code_symbol), Nan::New<Integer>(errCode));
 
-      Local<Value> argv[1] = { err };
-      onerror->Call(Nan::New<Object>(context), 1, argv);
-
       if (doClose || IS_DEAD_ERRNO(errCode))
         close(IS_DEAD_ERRNO(errCode));
+
+      Local<Value> argv[1] = { err };
+      onerror->Call(Nan::New<Object>(context), 1, argv);
     }
 
     void on_row() {
