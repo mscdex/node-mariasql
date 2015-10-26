@@ -8,6 +8,11 @@ var t = -1;
 var testCaseTimeout = 10 * 1000;
 var timeout;
 
+var DEFAULT_HOST = process.env.DB_HOST || '127.0.0.1';
+var DEFAULT_PORT = +(process.env.DB_PORT || 3306);
+var DEFAULT_USER = process.env.DB_USER || 'root';
+var DEFAULT_PASSWORD = process.env.DB_PASS || '';
+
 function NOOP(err) { assert.strictEqual(err, null); }
 
 var tests = [
@@ -891,10 +896,10 @@ var tests = [
 
 function makeClient(opts, closeCb) {
   var config = {
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: +(process.env.DB_PORT || 3306),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASS || ''
+    host: DEFAULT_USER,
+    port: DEFAULT_PORT,
+    user: DEFAULT_USER,
+    password: DEFAULT_PASSWORD
   };
 
   if (typeof opts === 'object' && opts !== null) {
