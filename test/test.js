@@ -896,7 +896,7 @@ var tests = [
 
 function makeClient(opts, closeCb) {
   var config = {
-    host: DEFAULT_USER,
+    host: DEFAULT_HOST,
     port: DEFAULT_PORT,
     user: DEFAULT_USER,
     password: DEFAULT_PASSWORD
