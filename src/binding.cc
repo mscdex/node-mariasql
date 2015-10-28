@@ -38,7 +38,7 @@ using namespace v8;
 #else
 # define DBG_LOG(fmt, ...) (void(0))
 #endif
-#define FREE(p) if (p) { free(p); p = NULL; }
+#define FREE(p) if (p) { free(p); p = nullptr; }
 #define IS_BINARY(f) ((f.flags & BINARY_FLAG) &&                               \
                       ((f.type == MYSQL_TYPE_TINY_BLOB)   ||                   \
                        (f.type == MYSQL_TYPE_MEDIUM_BLOB) ||                   \
@@ -319,7 +319,7 @@ class Client : public Nan::ObjectWrap {
       threadId = 0;
 
 #define X(name)                                                                \
-      on##name = NULL;
+      on##name = nullptr;
       EVENT_NAMES
 #undef X
     }
@@ -342,35 +342,35 @@ class Client : public Nan::ObjectWrap {
       if (initialized)
         clear_state();
 
-      poll_handle = NULL;
+      poll_handle = nullptr;
       mysql_sock = 0;
 
       mysql_init(&mysql);
       mysql_options(&mysql, MYSQL_OPT_NONBLOCK, 0);
 
-      config.user = NULL;
-      config.password = NULL;
-      config.host = NULL;
+      config.user = nullptr;
+      config.password = nullptr;
+      config.host = nullptr;
       config.port = 3306;
-      config.unixSocket = NULL;
-      config.db = NULL;
+      config.unixSocket = nullptr;
+      config.db = nullptr;
       config.client_opts = CLIENT_MULTI_RESULTS | CLIENT_REMEMBER_OPTIONS;
       config.tcpka = 0; // disabled by default
       config.tcpkaCnt = 0; // use system default
       config.tcpkaIntvl = 0; // use system default
       config.metadata = false;
-      config.charset = NULL;
-      config.ssl_key = NULL;
-      config.ssl_cert = NULL;
-      config.ssl_ca = NULL;
-      config.ssl_capath = NULL;
-      config.ssl_cipher = NULL;
+      config.charset = nullptr;
+      config.ssl_key = nullptr;
+      config.ssl_cert = nullptr;
+      config.ssl_ca = nullptr;
+      config.ssl_capath = nullptr;
+      config.ssl_cipher = nullptr;
 
       is_cont = false;
 
       is_paused = false;
 
-      cur_query = NULL;
+      cur_query = nullptr;
 
       initialized = true;
     }
@@ -610,7 +610,7 @@ class Client : public Nan::ObjectWrap {
                                               static_cast<unsigned long>(
                                                 strlen(cur_query)
                                               ));
-              cur_query = NULL;
+              cur_query = nullptr;
               if (status) {
                 done = true;
                 is_cont = true;
@@ -913,7 +913,7 @@ class Client : public Nan::ObjectWrap {
       DBG_LOG("[%lu] cb_close() state=%s\n",
               obj->threadId, state_strings[obj->state]);
 
-      obj->onclose->Call(Nan::New<Object>(obj->context), 0, NULL);
+      obj->onclose->Call(Nan::New<Object>(obj->context), 0, nullptr);
     }
 
     static void cb_poll(uv_poll_t* handle, int status, int events) {
@@ -945,12 +945,12 @@ class Client : public Nan::ObjectWrap {
     void on_connect() {
       Nan::HandleScope scope;
       DBG_LOG("[%lu] on_connect() state=%s\n", threadId, state_strings[state]);
-      onconnect->Call(Nan::New<Object>(context), 0, NULL);
+      onconnect->Call(Nan::New<Object>(context), 0, nullptr);
     }
 
     void on_error(bool doClose = false,
                   unsigned int errNo = 0,
-                  const char* errMsg = NULL) {
+                  const char* errMsg = nullptr) {
       Nan::HandleScope scope;
 
       unsigned int errCode = mysql_errno(&mysql);
@@ -1004,7 +1004,7 @@ class Client : public Nan::ObjectWrap {
       on_resultinfo(fields, n_fields);
 
       for (unsigned int f = 0; f < n_fields; ++f) {
-        if (cur_row[f] == NULL)
+        if (cur_row[f] == nullptr)
           field_value = Nan::Null();
         else if (IS_BINARY(fields[f])) {
           vlen = lengths[f];
@@ -1064,7 +1064,7 @@ class Client : public Nan::ObjectWrap {
         lengths = mysql_fetch_lengths(cur_result);
         row = Nan::New<Array>(n_fields);
         for (unsigned int f = 0; f < n_fields; ++f) {
-          if (dbrow[f] == NULL)
+          if (dbrow[f] == nullptr)
             field_value = Nan::Null();
           else if (IS_BINARY(fields[f])) {
             vlen = lengths[f];
@@ -1206,14 +1206,14 @@ class Client : public Nan::ObjectWrap {
       Nan::HandleScope scope;
 
       DBG_LOG("[%lu] on_ping() state=%s\n", threadId, state_strings[state]);
-      onping->Call(Nan::New<Object>(context), 0, NULL);
+      onping->Call(Nan::New<Object>(context), 0, nullptr);
     }
 
     void on_idle() {
       Nan::HandleScope scope;
 
       DBG_LOG("[%lu] on_idle() state=%s\n", threadId, state_strings[state]);
-      onidle->Call(Nan::New<Object>(context), 0, NULL);
+      onidle->Call(Nan::New<Object>(context), 0, nullptr);
     }
 
     void apply_config(Local<Object> cfg) {
@@ -1231,21 +1231,21 @@ class Client : public Nan::ObjectWrap {
 #undef X
 
       if (!user_v->IsString() || user_v->ToString()->Length() == 0)
-        config.user = NULL;
+        config.user = nullptr;
       else {
         Nan::Utf8String user_s(user_v);
         config.user = strdup(*user_s);
       }
 
       if (!password_v->IsString() || password_v->ToString()->Length() == 0)
-        config.password = NULL;
+        config.password = nullptr;
       else {
         Nan::Utf8String password_s(password_v);
         config.password = strdup(*password_s);
       }
 
       if (!host_v->IsString() || host_v->ToString()->Length() == 0)
-        config.host = NULL;
+        config.host = nullptr;
       else {
         Nan::Utf8String host_s(host_v);
         config.host = strdup(*host_s);
@@ -1260,7 +1260,7 @@ class Client : public Nan::ObjectWrap {
       }
 
       if (!unixSocket_v->IsString() || unixSocket_v->ToString()->Length() == 0)
-        config.unixSocket = NULL;
+        config.unixSocket = nullptr;
       else {
         Nan::Utf8String unixSocket_s(unixSocket_v);
         config.unixSocket = strdup(*unixSocket_s);
@@ -1665,10 +1665,10 @@ static NAN_METHOD(Version) {
 
     Statement() {
       DBG_LOG("Statement()\n");
-      stmt = NULL;
-      params = NULL;
+      stmt = nullptr;
+      params = nullptr;
       params_len = 0;
-      query = NULL;
+      query = nullptr;
       is_prepared = false;
     }
 
