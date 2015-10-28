@@ -730,6 +730,7 @@ class Client : public Nan::ObjectWrap {
                 is_cont = true;
               } else {
                 if (err) {
+                  on_error();
                   if (cur_result)
                     state = STATE_FREERESULT;
                   else {
@@ -751,6 +752,7 @@ class Client : public Nan::ObjectWrap {
               else {
                 is_cont = false;
                 if (err) {
+                  on_error();
                   if (cur_result)
                     state = STATE_FREERESULT;
                   else {
@@ -774,6 +776,7 @@ class Client : public Nan::ObjectWrap {
                 done = true;
                 is_cont = true;
               } else {
+                cur_result = nullptr;
                 if (mysql_more_results(&mysql))
                   state = STATE_NEXTRESULT;
                 else {
@@ -787,6 +790,7 @@ class Client : public Nan::ObjectWrap {
               if (status)
                 done = true;
               else {
+                cur_result = nullptr;
                 is_cont = false;
                 if (mysql_more_results(&mysql))
                   state = STATE_NEXTRESULT;
