@@ -892,6 +892,80 @@ var tests = [
       });
     }
   },
+  { what: 'Stored procedure',
+    run: function() {
+      var client = makeClient();
+      client.query('CREATE DATABASE IF NOT EXISTS `foo`', NOOP);
+      client.query('USE `foo`', NOOP);
+      client.query('DROP PROCEDURE IF EXISTS `testproc`', NOOP);
+      client.query('CREATE PROCEDURE `testproc` ()\
+                    BEGIN\
+                      SELECT 1;\
+                    END');
+      client.query('CALL testproc', function(err, rows) {
+        assert.strictEqual(err, null);
+        assert.deepStrictEqual(
+          rows,
+          [
+            appendProps(
+              [ {1: '1'} ],
+              { info: {
+                  numRows: '1',
+                  affectedRows: '1',
+                  insertId: '0',
+                  metadata: undefined
+                }
+              }
+            ),
+            { info: {
+                numRows: '0',
+                affectedRows: '0',
+                insertId: '0',
+                metadata: undefined
+              }
+            }
+          ]
+        );
+        assert.strictEqual(client.connected, true);
+        client.end();
+      });
+      client.query('DROP PROCEDURE IF EXISTS `testproc`', NOOP);
+    }
+  },
+  { what: 'Stored procedure (bad second query)',
+    run: function() {
+      var client = makeClient();
+      client.query('CREATE DATABASE IF NOT EXISTS `foo`', NOOP);
+      client.query('USE `foo`', NOOP);
+      client.query('DROP PROCEDURE IF EXISTS `testproc`', NOOP);
+      client.query('CREATE PROCEDURE `testproc` ()\
+                    BEGIN\
+                      SELECT 1;\
+                      SELECT f;\
+                    END');
+      client.query('CALL testproc', function(err, rows) {
+        assert.strictEqual(err, null);
+        assert.strictEqual(rows.length, 2);
+        assert.deepStrictEqual(
+          rows[0],
+          appendProps(
+            [ {1: '1'} ],
+            { info: {
+                numRows: '1',
+                affectedRows: '1',
+                insertId: '0',
+                metadata: undefined
+              }
+            }
+          )
+        );
+        assert.strictEqual(rows[1].code, 1054);
+        assert.strictEqual(client.connected, true);
+        client.end();
+      });
+      client.query('DROP PROCEDURE IF EXISTS `testproc`', NOOP);
+    }
+  },
 ];
 
 function makeClient(opts, closeCb) {
