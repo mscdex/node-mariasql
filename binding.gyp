@@ -20,6 +20,12 @@
               '-lws2_32.lib',
             ],
         }],
+        [ 'OS=="mac"', {
+          'xcode_settings': {
+            'GCC_VERSION': 'com.apple.compilers.llvm.clang.1_0',
+            'CLANG_CXX_LANGUAGE_STANDARD': 'gnu++0x',  # -std=gnu++0x
+          },
+        }],
       ],
       'includes': [ 'deps/libmariadbclient/config/config.gypi' ],
       'dependencies': [
