@@ -10,7 +10,7 @@
         'deps/libmariadbclient/libmysql',
         "<!(node -e \"require('nan')\")"
       ],
-      'cflags': [ '-O3', '-std=c++11' ],
+      'cflags': [ '-O3', '-std=c++0x' ],
       'conditions': [
         [ 'OS=="win"', {
             # Re-enable warnings that were disabled for libmariadbclient

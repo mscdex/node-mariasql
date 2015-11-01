@@ -7,10 +7,48 @@
 # include <inttypes.h>
 # include <stdint.h>
 #endif
+
 #ifndef _MSC_VER
 # include <limits>
 #else
 # define strcasecmp _stricmp
+#endif
+
+#if defined(__clang__)
+# ifndef __has_extension
+#  define __has_extension __has_feature
+# endif
+# if __has_extension(cxx_nullptr)
+#  define SUPPORTS_NULLPTR 1
+# else
+#  define SUPPORTS_NULLPTR 0
+# endif
+#else
+# if defined(__GNUC__)
+#  define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
+#  define GCC_VERSION_AT_LEAST(major, minor, patch) (GCC_VERSION >= (major * 10000 + minor * 100 + patch))
+# else
+#  define GCC_VERSION_AT_LEAST(major, minor, patch) 1 /* Assume new compiler */
+# endif
+# if GCC_VERSION_AT_LEAST(4, 6, 0)
+#  define SUPPORTS_NULLPTR 1
+# else
+#  define SUPPORTS_NULLPTR 0
+# endif
+#endif
+#if !SUPPORTS_NULLPTR
+  const                        // this is a const object...
+  class {
+  public:
+    template<class T>          // convertible to any type
+      operator T*() const      // of null non-member
+      { return 0; }            // pointer...
+    template<class C, class T> // or any type of null
+      operator T C::*() const  // member pointer...
+      { return 0; }
+  private:
+    void operator&() const;    // whose address can't be taken
+  } nullptr = {};              // and whose name is nullptr
 #endif
 
 #include <node.h>
