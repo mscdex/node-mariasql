@@ -421,7 +421,11 @@ static MY_CHARSET_HANDLER my_charset_handler=
     my_strntod_8bit,
     my_strtoll10_8bit,
     my_strntoull10rnd_8bit,
-    my_scan_8bit
+    my_scan_8bit,
+    my_charlen_8bit,
+    my_well_formed_char_length_8bit,
+    my_copy_8bit,
+    my_wc_mb_bin, /* native_to_mb */
 };
 
 
@@ -732,7 +736,7 @@ static MY_COLLATION_HANDLER my_collation_german2_ci_handler=
 struct charset_info_st my_charset_latin1_german2_ci=
 {
   31,0,0,				/* number    */
-  MY_CS_COMPILED|MY_CS_STRNXFRM,	/* state     */
+  MY_CS_COMPILED|MY_CS_STRNXFRM|MY_CS_NON1TO1, /* state     */
   "latin1",				/* cs name    */
   "latin1_german2_ci",			/* name      */
   "",					/* comment   */

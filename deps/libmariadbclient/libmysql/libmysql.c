@@ -859,12 +859,11 @@ mysql_list_fields(MYSQL *mysql, const char *table, const char *wild)
 MYSQL_RES * STDCALL
 mysql_list_processes(MYSQL *mysql)
 {
-  MYSQL_DATA *fields;
+  MYSQL_DATA *UNINIT_VAR(fields);
   uint field_count;
   uchar *pos;
   DBUG_ENTER("mysql_list_processes");
 
-  LINT_INIT(fields);
   if (simple_command(mysql,COM_PROCESS_INFO,0,0,0))
     DBUG_RETURN(0);
   free_old_query(mysql);
@@ -4929,10 +4928,6 @@ my_bool STDCALL mysql_read_query_result(MYSQL *mysql)
 /********************************************************************
   mysql_net_ functions - low-level API to MySQL protocol
 *********************************************************************/
-#if MYSQL_VERSION_ID > 100100
-#error remove these wrappers in 10.1, rename functions instead
-#endif
-
 ulong STDCALL mysql_net_read_packet(MYSQL *mysql)
 {
   return cli_safe_read(mysql);

@@ -63,7 +63,7 @@ size_t my_casedn_str_mb(CHARSET_INFO * cs, char *str)
 
 
 static inline MY_UNICASE_CHARACTER*
-get_case_info_for_ch(const CHARSET_INFO *cs, uint page, uint offs)
+get_case_info_for_ch(CHARSET_INFO *cs, uint page, uint offs)
 {
   MY_UNICASE_CHARACTER *p;
   return cs->caseinfo && (p= cs->caseinfo->page[page]) ? &p[offs] : NULL;
@@ -423,6 +423,99 @@ size_t my_well_formed_len_mb(CHARSET_INFO *cs, const char *b, const char *e,
 }
 
 
+/*
+  Append a badly formed piece of string.
+  Bad bytes are fixed to '?'.
+  
+  @param to        The destination string
+  @param to_end    The end of the destination string
+  @param from      The source string
+  @param from_end  The end of the source string
+  @param nchars    Write not more than "nchars" characters.
+  @param status    Copying status, must be previously initialized,
+                   e.g. using well_formed_char_length() on the original
+                   full source string.
+*/
+static size_t
+my_append_fix_badly_formed_tail(CHARSET_INFO *cs,
+                                char *to, char *to_end,
+                                const char *from, const char *from_end,
+                                size_t nchars,
+                                MY_STRCOPY_STATUS *status)
+{
+  char *to0= to;
+
+  for ( ; nchars; nchars--)
+  {
+    int chlen;
+    if ((chlen= cs->cset->charlen(cs, (const uchar*) from,
+                                      (const uchar *) from_end)) > 0)
+    {
+      /* Found a valid character */         /* chlen == 1..MBMAXLEN  */
+      DBUG_ASSERT(chlen <= (int) cs->mbmaxlen);
+      if (to + chlen > to_end)
+        goto end;                           /* Does not fit to "to" */
+      memcpy(to, from, (size_t) chlen);
+      from+= chlen;
+      to+= chlen;
+      continue;
+    }
+    if (chlen == MY_CS_ILSEQ)              /* chlen == 0 */
+    {
+      DBUG_ASSERT(from < from_end);  /* Shouldn't get MY_CS_ILSEQ if empty */
+      goto bad;
+    }
+    /* Got an incomplete character */       /* chlen == MY_CS_TOOSMALLXXX  */
+    DBUG_ASSERT(chlen >= MY_CS_TOOSMALL6); 
+    DBUG_ASSERT(chlen <= MY_CS_TOOSMALL);
+    if (from >= from_end)                   
+      break;                                /* End of the source string    */
+bad:
+    /* Bad byte sequence, or incomplete character found */
+    if (!status->m_well_formed_error_pos)
+      status->m_well_formed_error_pos= from;
+
+    if ((chlen= cs->cset->wc_mb(cs, '?', (uchar*) to, (uchar *) to_end)) <= 0)
+      break; /* Question mark does not fit into the destination */
+    to+= chlen;
+    from++;
+  }
+end:
+  status->m_source_end_pos= from;
+  return to - to0;
+}
+
+
+size_t
+my_copy_fix_mb(CHARSET_INFO *cs,
+               char *dst, size_t dst_length,
+               const char *src, size_t src_length,
+               size_t nchars, MY_STRCOPY_STATUS *status)
+{
+  size_t well_formed_nchars;
+  size_t well_formed_length;
+  size_t fixed_length;
+
+  set_if_smaller(src_length, dst_length);
+  well_formed_nchars= cs->cset->well_formed_char_length(cs,
+                                                        src, src + src_length,
+                                                        nchars, status);
+  DBUG_ASSERT(well_formed_nchars <= nchars);
+  memmove(dst, src, (well_formed_length= status->m_source_end_pos - src));
+  if (!status->m_well_formed_error_pos)
+    return well_formed_length;
+
+  fixed_length= my_append_fix_badly_formed_tail(cs,
+                                                dst + well_formed_length,
+                                                dst + dst_length,
+                                                src + well_formed_length,
+                                                src + src_length,
+                                                nchars - well_formed_nchars,
+                                                status);
+  return well_formed_length + fixed_length;
+}
+
+
 uint my_instr_mb(CHARSET_INFO *cs,
                  const char *b, size_t b_length, 
                  const char *s, size_t s_length,
@@ -718,25 +811,8 @@ my_hash_sort_mb_bin(CHARSET_INFO *cs __attribute__((unused)),
 static void pad_max_char(CHARSET_INFO *cs, char *str, char *end)
 {
   char buf[10];
-  char buflen;
-  
-  if (!(cs->state & MY_CS_UNICODE))
-  {
-    if (cs->max_sort_char <= 255)
-    {
-      bfill(str, end - str, cs->max_sort_char);
-      return;
-    }
-    buf[0]= cs->max_sort_char >> 8;
-    buf[1]= cs->max_sort_char & 0xFF;
-    buflen= 2;
-  }
-  else
-  {
-    buflen= cs->cset->wc_mb(cs, cs->max_sort_char, (uchar*) buf,
-                            (uchar*) buf + sizeof(buf));
-  }
-  
+  char buflen= cs->cset->native_to_mb(cs, cs->max_sort_char, (uchar*) buf,
+                                      (uchar*) buf + sizeof(buf));
   DBUG_ASSERT(buflen > 0);
   do
   {
@@ -1465,22 +1541,6 @@ int my_mb_ctype_mb(CHARSET_INFO *cs, int *ctype,
             my_uni_ctype[wc>>8].pctype;    
   return res;
 }
-
-
-MY_COLLATION_HANDLER my_collation_mb_bin_handler =
-{
-    NULL,		/* init */
-    my_strnncoll_mb_bin,
-    my_strnncollsp_mb_bin,
-    my_strnxfrm_mb,
-    my_strnxfrmlen_simple,
-    my_like_range_mb,
-    my_wildcmp_mb_bin,
-    my_strcasecmp_mb_bin,
-    my_instr_mb,
-    my_hash_sort_mb_bin,
-    my_propagate_simple
-};
 
 
 #endif

@@ -601,17 +601,17 @@
 /* #undef SO_EXT */
 
 #define MYSQL_VERSION_MAJOR 10
-#define MYSQL_VERSION_MINOR 0
-#define MYSQL_VERSION_PATCH 21
+#define MYSQL_VERSION_MINOR 1
+#define MYSQL_VERSION_PATCH 8
 #define MYSQL_VERSION_EXTRA ""
 
 #define PACKAGE "mysql"
 #define PACKAGE_BUGREPORT ""
 #define PACKAGE_NAME "MySQL Server"
-#define PACKAGE_STRING "MySQL Server 10.0.21"
+#define PACKAGE_STRING "MySQL Server 10.1.8"
 #define PACKAGE_TARNAME "mysql"
-#define PACKAGE_VERSION "10.0.21"
-#define VERSION "10.0.21"
+#define PACKAGE_VERSION "10.1.8"
+#define VERSION "10.1.8"
 #define PROTOCOL_VERSION 10
 
 
