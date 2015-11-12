@@ -1261,16 +1261,17 @@ class Client : public Nan::ObjectWrap {
       onidle->Call(Nan::New<Object>(context), 0, nullptr);
     }
 
-    void apply_config(Local<Object> cfg) {
+    bool apply_config(Local<Object> cfg) {
       DBG_LOG("[%lu] apply_config()\n", threadId);
 
       if (state != STATE_CLOSED)
-        return;
+        return false;
 
       if (!init()) {
-        return Nan::ThrowError(
+        Nan::ThrowError(
           "The async interface is not currently supported on your platform."
         );
+        return false;
       }
 
 #define X(name)                                                                \
@@ -1352,9 +1353,8 @@ class Client : public Nan::ObjectWrap {
       if (compress_v->IsBoolean() && compress_v->BooleanValue())
         mysql_options(&mysql, MYSQL_OPT_COMPRESS, 0);
 
-      if (local_infile_v->IsBoolean() && local_infile_v->BooleanValue()) {
+      if (local_infile_v->IsBoolean() && local_infile_v->BooleanValue())
         mysql_options(&mysql, MYSQL_OPT_LOCAL_INFILE, &MY_BOOL_TRUE);
-      }
 
       if (read_default_file_v->IsString()
           && read_default_file_v->ToString()->Length() > 0) {
@@ -1433,6 +1433,8 @@ class Client : public Nan::ObjectWrap {
       // always disable auto-reconnect
       my_bool reconnect = 0;
       mysql_options(&mysql, MYSQL_OPT_RECONNECT, &reconnect);
+
+      return true;
     }
 
     static NAN_METHOD(New) {
@@ -1495,7 +1497,8 @@ class Client : public Nan::ObjectWrap {
 
       if (info.Length() > 0 && info[0]->IsObject()) {
         Local<Object> cfg = info[0]->ToObject();
-        obj->apply_config(cfg);
+        if (!obj->apply_config(cfg))
+          return;
       } else if (!obj->init()) {
         return Nan::ThrowError(
           "The async interface is not currently supported on your platform."
@@ -1819,3 +1822,4 @@ extern "C" {
 
   NODE_MODULE(sqlclient, init);
 }
+
