@@ -375,7 +375,7 @@ class Client : public Nan::ObjectWrap {
       close();
     }
 
-    void init() {
+    bool init() {
       DBG_LOG("[%lu] init()\n", threadId);
       if (initialized)
         clear_state();
@@ -384,7 +384,8 @@ class Client : public Nan::ObjectWrap {
       mysql_sock = 0;
 
       mysql_init(&mysql);
-      mysql_options(&mysql, MYSQL_OPT_NONBLOCK, 0);
+      if (mysql_options(&mysql, MYSQL_OPT_NONBLOCK, 0) != 0)
+        return false;
 
       config.user = nullptr;
       config.password = nullptr;
@@ -411,6 +412,8 @@ class Client : public Nan::ObjectWrap {
       cur_query = nullptr;
 
       initialized = true;
+
+      return true;
     }
 
     void clear_state() {
@@ -1264,7 +1267,11 @@ class Client : public Nan::ObjectWrap {
       if (state != STATE_CLOSED)
         return;
 
-      init();
+      if (!init()) {
+        return Nan::ThrowError(
+          "The async interface is not currently supported on your platform."
+        );
+      }
 
 #define X(name)                                                                \
       Local<Value> name##_v =                                                  \
@@ -1489,8 +1496,11 @@ class Client : public Nan::ObjectWrap {
       if (info.Length() > 0 && info[0]->IsObject()) {
         Local<Object> cfg = info[0]->ToObject();
         obj->apply_config(cfg);
-      } else
-        obj->init();
+      } else if (!obj->init()) {
+        return Nan::ThrowError(
+          "The async interface is not currently supported on your platform."
+        );
+      }
 
       obj->connect();
     }
