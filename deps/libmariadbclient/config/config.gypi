@@ -36,5 +36,11 @@
     [ 'OS=="solaris"', {
       'include_dirs': [ 'solaris' ],
     }],
+    # TODO: This target_arch list may need to be expanded upon?
+    [ 'target_arch=="arm" or target_arch=="armv7" or target_arch=="arm64"', {
+      'defines': [
+        'HAVE_UCONTEXT_H'
+      ],
+    }],
   ],
 }
