@@ -120,6 +120,11 @@ namespace TaoCrypt {
 
 
 // general MAX
+// XXX: Windows defines a max() macro. Undefine it here to prevent compilation
+// errors -brian
+#ifdef max
+# undef max
+#endif
 template<typename T> inline
 const T& max(const T& a, const T& b)
 {
