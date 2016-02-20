@@ -957,6 +957,11 @@ class Client : public Nan::ObjectWrap {
       Client* obj = (Client*)handle->data;
       DBG_LOG("[%lu] cb_close() state=%s\n",
               obj->threadId, state_strings[obj->state]);
+              
+      if (NULL == obj->state) {
+        DBG_LOG("[%lu] cb_close() bindings have been garbage collected returning to avoid SIGSEGV on v8\n", obj->threadId);
+        return;
+      }                  
 
       obj->onclose->Call(Nan::New<Object>(obj->context), 0, nullptr);
     }
