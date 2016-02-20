@@ -957,7 +957,7 @@ class Client : public Nan::ObjectWrap {
       Client* obj = (Client*)handle->data;
       DBG_LOG("[%lu] cb_close() state=%s\n",
               obj->threadId, state_strings[obj->state]);
-                                                                                          
+
       obj->onclose->Call(Nan::New<Object>(obj->context), 0, nullptr);
     }
 
