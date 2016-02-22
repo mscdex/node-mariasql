@@ -332,7 +332,7 @@ class Client : public Nan::ObjectWrap {
     bool is_destructing;
     bool is_paused;
     bool is_buffering;
-    char* cur_query;
+    Nan::Utf8String* cur_query;
     MYSQL_RES* cur_result;
     //MYSQL_STMT* cur_stmt;
     MYSQL_ROW cur_row;
@@ -429,6 +429,11 @@ class Client : public Nan::ObjectWrap {
       FREE(config.ssl_capath);
       FREE(config.ssl_cipher);
       FREE(config.charset);
+
+      if (cur_query) {
+        delete cur_query;
+        cur_query = nullptr;
+      }
     }
 
     bool close(bool is_dead=false) {
@@ -469,12 +474,14 @@ class Client : public Nan::ObjectWrap {
       return false;
     }
 
-    bool query(const char* qry, bool columns, bool metadata, bool buffer) {
+    bool query(Local<Value> qry, bool columns, bool metadata, bool buffer) {
       DBG_LOG("[%lu] query() state=%s,columns=%d,metadata=%d,buffer=%d,"
               "query=%s\n",
               threadId, state_strings[state], columns, metadata, buffer, qry);
       if (state == STATE_IDLE) {
-        cur_query = (char*)qry;
+        if (cur_query)
+          delete cur_query;
+        cur_query = new Nan::Utf8String(qry);
         req_columns = columns;
         req_metadata = metadata;
         is_buffering = buffer;
@@ -647,15 +654,18 @@ class Client : public Nan::ObjectWrap {
             if (!is_cont) {
               status = mysql_real_query_start(&err,
                                               &mysql,
-                                              cur_query,
+                                              **cur_query,
                                               static_cast<unsigned long>(
-                                                strlen(cur_query)
+                                                cur_query->length()
                                               ));
-              cur_query = nullptr;
               if (status) {
                 done = true;
                 is_cont = true;
               } else {
+                if (cur_query) {
+                  delete cur_query;
+                  cur_query = nullptr;
+                }
                 if (err) {
                   state = STATE_IDLE;
                   on_error();
@@ -674,6 +684,10 @@ class Client : public Nan::ObjectWrap {
                 done = true;
               else {
                 is_cont = false;
+                if (cur_query) {
+                  delete cur_query;
+                  cur_query = nullptr;
+                }
                 if (err) {
                   state = STATE_IDLE;
                   on_error();
@@ -1576,8 +1590,7 @@ class Client : public Nan::ObjectWrap {
         return Nan::ThrowTypeError("buffered argument must be a boolean");
 
       //if (info[0]->IsString()) {
-        Nan::Utf8String query_s(info[0]);
-        obj->query(*query_s,
+        obj->query(info[0],
                    info[1]->BooleanValue(),
                    info[2]->BooleanValue(),
                    info[3]->BooleanValue());
