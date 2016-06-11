@@ -76,6 +76,50 @@ var tests = [
                          "SELECT * FROM foo WHERE id = '123'"
                          + " AND first = 'foo' AND last = '?'"
                          + " AND middle = '?'");
+
+      fn = client.prepare("SELECT * FROM foo WHERE id = '?'"
+                         + " AND first = ? AND last = '?' AND middle = '?'");
+      assert.strictEqual(fn(['foo', 'bar', 'baz']),
+                        "SELECT * FROM foo WHERE id = '?'"
+                        + " AND first = 'foo' AND last = '?'"
+                        + " AND middle = '?'");
+
+      fn = client.prepare("SELECT 'test?value' FROM foo WHERE id = :id"
+                         + " AND first = ? AND last = '?' AND middle = '?'");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: '123' })),
+                        "SELECT 'test?value' FROM foo WHERE id = '123'"
+                        + " AND first = 'foo' AND last = '?'"
+                        + " AND middle = '?'");
+      fn = client.prepare("SELECT ? FROM foo WHERE id = :id"
+                        + " AND first = ? AND last = '?' AND middle = '?'");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: '123' })),
+                       "SELECT 'foo' FROM foo WHERE id = '123'"
+                       + " AND first = 'bar' AND last = '?'"
+                       + " AND middle = '?'");
+      fn = client.prepare("SELECT ?, '?' FROM foo WHERE id = :id"
+                         + " AND first = ? AND last = '?' AND middle = '?'");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: '123' })),
+                        "SELECT 'foo', '?' FROM foo WHERE id = '123'"
+                        + " AND first = 'bar' AND last = '?'"
+                        + " AND middle = '?'");
+      fn = client.prepare("SELECT :id FROM foo WHERE id = :id"
+                         + " AND first = ? AND last = '?' AND middle = '?'");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: '123' })),
+                        "SELECT '123' FROM foo WHERE id = '123'"
+                        + " AND first = 'foo' AND last = '?'"
+                        + " AND middle = '?'");
+      fn = client.prepare("SELECT ':id' FROM foo WHERE id = :id"
+                       + " AND first = ? AND last = '?' AND middle = '?'");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: '123' })),
+                      "SELECT ':id' FROM foo WHERE id = '123'"
+                      + " AND first = 'foo' AND last = '?'"
+                      + " AND middle = '?'");
+      fn = client.prepare("SELECT '?', ':id', ?, :id FROM foo WHERE id = :id"
+                       + " AND first = ? AND last = '?' AND middle = '?'");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: '123' })),
+                      "SELECT '?', ':id', 'foo', '123' FROM foo WHERE id = '123'"
+                      + " AND first = 'bar' AND last = '?'"
+                      + " AND middle = '?'");
       next();
     }
   },
@@ -1035,7 +1079,7 @@ function makeFooTable(client, colDefs, tableOpts) {
       opts.push(format('%s=%s', key, tableOpts[key]));
     });
     tableOpts = opts.join(' ');
-  } else 
+  } else
     tableOpts = '';
 
   client.query('CREATE DATABASE IF NOT EXISTS `foo`', NOOP);
@@ -1045,7 +1089,7 @@ function makeFooTable(client, colDefs, tableOpts) {
                  cols.join(', '),
                  tableOpts);
   client.query(query, NOOP);
-  
+
 }
 
 function next() {
