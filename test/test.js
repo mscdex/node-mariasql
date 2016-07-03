@@ -35,21 +35,39 @@ var tests = [
       var client = new Client();
       var fn;
       fn = client.prepare("SELECT * FROM foo WHERE id = '123'");
-      assert.strictEqual(fn({ id: 456 }),
+      assert.strictEqual(fn({ id: '456' }),
                          "SELECT * FROM foo WHERE id = '123'");
       fn = client.prepare("SELECT * FROM foo WHERE id = :id");
-      assert.strictEqual(fn({ id: 123 }),
+      assert.strictEqual(fn({ id: '123' }),
                          "SELECT * FROM foo WHERE id = '123'");
-      assert.strictEqual(fn({ id: 456 }),
+      assert.strictEqual(fn({ id: '456' }),
                          "SELECT * FROM foo WHERE id = '456'");
       fn = client.prepare("SELECT * FROM foo WHERE id = ?");
-      assert.strictEqual(fn([123]),
+      assert.strictEqual(fn(['123']),
                          "SELECT * FROM foo WHERE id = '123'");
-      assert.strictEqual(fn([456]),
+      assert.strictEqual(fn(['456']),
                          "SELECT * FROM foo WHERE id = '456'");
       fn = client.prepare("SELECT * FROM foo WHERE id = :0 AND name = :1");
       assert.strictEqual(fn(['123', 'baz']),
                          "SELECT * FROM foo WHERE id = '123' AND name = 'baz'");
+
+      // Integer parsing cases
+      fn = client.prepare("SELECT * FROM foo WHERE id = 123");
+      assert.strictEqual(fn({ id: 456 }),
+                         "SELECT * FROM foo WHERE id = 123");
+      fn = client.prepare("SELECT * FROM foo WHERE id = :id");
+      assert.strictEqual(fn({ id: 123 }),
+                         "SELECT * FROM foo WHERE id = 123");
+      assert.strictEqual(fn({ id: 456 }),
+                         "SELECT * FROM foo WHERE id = 456");
+      fn = client.prepare("SELECT * FROM foo WHERE id = ?");
+      assert.strictEqual(fn([123]),
+                         "SELECT * FROM foo WHERE id = 123");
+      assert.strictEqual(fn([456]),
+                         "SELECT * FROM foo WHERE id = 456");
+      fn = client.prepare("SELECT * FROM foo WHERE id = :0 AND name = :1");
+      assert.strictEqual(fn([123, 'baz']),
+                         "SELECT * FROM foo WHERE id = 123 AND name = 'baz'");
 
       // Edge cases
       fn = client.prepare("SELECT * FROM foo WHERE id = :id"
@@ -74,6 +92,32 @@ var tests = [
                           + " AND first = ? AND last = '?' AND middle = '?'");
       assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: '123' })),
                          "SELECT * FROM foo WHERE id = '123'"
+                         + " AND first = 'foo' AND last = '?'"
+                         + " AND middle = '?'");
+
+      // Edge cases with integers
+      fn = client.prepare("SELECT * FROM foo WHERE id = :id"
+                          + " AND first = ? AND last = ? AND middle = '?'");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: 123 })),
+                         "SELECT * FROM foo WHERE id = 123"
+                         + " AND first = 'foo' AND last = 'bar'"
+                         + " AND middle = '?'");
+      fn = client.prepare("SELECT * FROM foo WHERE id = :id"
+                          + " AND first = ? AND last = '?' AND middle = ?");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: 123 })),
+                         "SELECT * FROM foo WHERE id = 123"
+                         + " AND first = 'foo' AND last = '?'"
+                         + " AND middle = 'bar'");
+      fn = client.prepare("SELECT * FROM foo WHERE id = :id"
+                          + " AND first = '?' AND last = '?' AND middle = ?");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: 123 })),
+                         "SELECT * FROM foo WHERE id = 123"
+                         + " AND first = '?' AND last = '?'"
+                         + " AND middle = 'foo'");
+      fn = client.prepare("SELECT * FROM foo WHERE id = :id"
+                          + " AND first = ? AND last = '?' AND middle = '?'");
+      assert.strictEqual(fn(appendProps(['foo', 'bar', 'baz'], { id: 123 })),
+                         "SELECT * FROM foo WHERE id = 123"
                          + " AND first = 'foo' AND last = '?'"
                          + " AND middle = '?'");
       next();
@@ -1035,7 +1079,7 @@ function makeFooTable(client, colDefs, tableOpts) {
       opts.push(format('%s=%s', key, tableOpts[key]));
     });
     tableOpts = opts.join(' ');
-  } else 
+  } else
     tableOpts = '';
 
   client.query('CREATE DATABASE IF NOT EXISTS `foo`', NOOP);
@@ -1045,7 +1089,7 @@ function makeFooTable(client, colDefs, tableOpts) {
                  cols.join(', '),
                  tableOpts);
   client.query(query, NOOP);
-  
+
 }
 
 function next() {
