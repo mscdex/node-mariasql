@@ -231,7 +231,9 @@ Client methods
 
     * **connTimeout** - _integer_ - Number of seconds to wait for a connection to be made. **Default:** 10
 
-    * **pingInterval** - _integer_ - Number of seconds between pings while idle. **Default:** 60
+    * **pingInactive** - _integer_ - Number of milliseconds between pings while idle (needs pingWaitRes). **Default:** Off
+
+    * **pingWaitRes** - _integer_ - Number of milliseconds to wait for ping answer. **Default:** Off
 
     * **secureAuth** - _boolean_ - Use password hashing available in MySQL 4.1.1+ when authenticating. **Default:** true
 
