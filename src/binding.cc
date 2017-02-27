@@ -63,6 +63,7 @@
 #include "snprintf.c"
 
 #include <mysql.h>
+#include <string.h>
 
 using namespace node;
 using namespace v8;
