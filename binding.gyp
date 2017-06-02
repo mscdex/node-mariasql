@@ -11,6 +11,9 @@
         "<!(node -e \"require('nan')\")"
       ],
       'cflags': [ '-O3', '-std=c++0x' ],
+      "cflags_cc!": [
+        "-fno-rtti"
+      ],
       'conditions': [
         [ 'OS=="win"', {
             # Re-enable warnings that were disabled for libmariadbclient
