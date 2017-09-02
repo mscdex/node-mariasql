@@ -34,22 +34,22 @@ var tests = [
     run: function() {
       var client = new Client();
       var fn;
-      fn = client.prepare("SELECT * FROM foo WHERE id = '123'");
-      assert.strictEqual(fn({ id: 456 }),
-                         "SELECT * FROM foo WHERE id = '123'");
-      fn = client.prepare("SELECT * FROM foo WHERE id = :id");
-      assert.strictEqual(fn({ id: 123 }),
-                         "SELECT * FROM foo WHERE id = '123'");
-      assert.strictEqual(fn({ id: 456 }),
-                         "SELECT * FROM foo WHERE id = '456'");
-      fn = client.prepare("SELECT * FROM foo WHERE id = ?");
-      assert.strictEqual(fn([123]),
-                         "SELECT * FROM foo WHERE id = '123'");
-      assert.strictEqual(fn([456]),
-                         "SELECT * FROM foo WHERE id = '456'");
-      fn = client.prepare("SELECT * FROM foo WHERE id = :0 AND name = :1");
-      assert.strictEqual(fn(['123', 'baz']),
-                         "SELECT * FROM foo WHERE id = '123' AND name = 'baz'");
+      fn = client.prepare("SELECT * FROM foo WHERE id = 'ABC' LIMIT 123");
+      assert.strictEqual(fn({ id: 'DEF', limit: 456 }),
+                         "SELECT * FROM foo WHERE id = 'ABC' LIMIT 123");
+      fn = client.prepare("SELECT * FROM foo WHERE id = :id LIMIT :limit");
+      assert.strictEqual(fn({ id: 'ABC', limit: 123 }),
+                         "SELECT * FROM foo WHERE id = 'ABC' LIMIT 123");
+      assert.strictEqual(fn({ id: 'DEF', limit: 456 }),
+                         "SELECT * FROM foo WHERE id = 'DEF' LIMIT 456");
+      fn = client.prepare("SELECT * FROM foo WHERE id = ? LIMIT ?");
+      assert.strictEqual(fn(['ABC', 123]),
+                         "SELECT * FROM foo WHERE id = 'ABC' LIMIT 123");
+      assert.strictEqual(fn(['DEF', 456]),
+                         "SELECT * FROM foo WHERE id = 'DEF' LIMIT 456");
+      fn = client.prepare("SELECT * FROM foo WHERE id = :0 AND name = :1 LIMIT :2");
+      assert.strictEqual(fn(['ABC', 'baz', 123]),
+                         "SELECT * FROM foo WHERE id = 'ABC' AND name = 'baz' LIMIT 123");
 
       // Edge cases
       fn = client.prepare("SELECT * FROM foo WHERE id = :id"
