@@ -35,7 +35,9 @@ extern "C" {
 #define inline __inline
 #endif
 #else
+#ifndef __FreeBSD__
 #include <alloca.h>
+#endif
 #endif
 #endif
 
