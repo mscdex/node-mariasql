@@ -12,14 +12,12 @@ notifications:
   email: false
 env:
   matrix:
-  - TRAVIS_NODE_VERSION="10"
-  - TRAVIS_NODE_VERSION="11"
-  - TRAVIS_NODE_VERSION="12"
-  - TRAVIS_NODE_VERSION="13"
+  - TRAVIS_NODE_VERSION="default"
+  - TRAVIS_NODE_VERSION="node"
 install:
   - node --version
-  - nvm ls || true
-  - nvm list available || true
+  - nvm ls
+  - nvm list
   - if [[ $TRAVIS_OS_NAME == "osx" ]]; then brew update > /dev/null && brew install mariadb && mysql.server start; fi
   - "rm -rf ~/.nvm && mkdir -p ~/.nvm && curl -sL `curl -sI https://github.com/creationix/nvm/releases/latest|sed -En 's/^Location: (.+)\\/releases\\/tag\\/(.+)/\\1\\/tarball\\/\\2/p'|tr -d '\r\n'`|tar zx --strip=1 -C ~/.nvm && source ~/.nvm/nvm.sh && nvm install $TRAVIS_NODE_VERSION"
   - npm --version
